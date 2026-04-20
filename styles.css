@@ -166,7 +166,7 @@ body::before {
 }
 
 .dashboard-shell {
-  padding: 1rem 0 2.2rem;
+  padding: 1.2rem 0 2.6rem;
 }
 
 .hero {
@@ -190,7 +190,7 @@ body::before {
   border: 2px solid var(--line);
   box-shadow: var(--shadow);
   border-radius: 0;
-  padding: 1rem 1.05rem;
+  padding: 1.1rem 1.15rem;
 }
 
 .bauhaus-frame {
@@ -208,44 +208,45 @@ body::before {
   border: 5px solid var(--red);
 }
 
-.principles-row {
+.quick-intel-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.principle-card h3 {
-  margin: 0 0 0.45rem;
-  font-family: "Montserrat", sans-serif;
-  font-size: 1rem;
+.quick-card {
+  min-height: 138px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.principle-card p {
+.quick-label {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 0.89rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
 }
 
-.steps-panel {
-  margin-bottom: 1rem;
+.quick-value {
+  margin: 0.42rem 0 0;
+  font-family: "Montserrat", sans-serif;
+  font-size: clamp(1.2rem, 2.1vw, 1.8rem);
+  line-height: 1.1;
 }
 
-.steps-list {
+.quick-sub {
   margin: 0;
-  padding-left: 1.15rem;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.steps-list li {
-  color: var(--ink);
+  color: var(--ink-soft);
+  font-size: 0.86rem;
 }
 
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 1.05rem;
 }
 
 .card-span-4 {
@@ -614,7 +615,7 @@ body[data-module="nba"] .hero {
   .stats-row,
   .compare-grid,
   .split,
-  .principles-row {
+  .quick-intel-row {
     grid-template-columns: 1fr;
   }
 }

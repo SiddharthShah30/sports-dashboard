@@ -5,6 +5,18 @@ const STORAGE_KEYS = {
 
 const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
 
+const TEAM_LOGO_ASSETS = {
+  Ferrari: "https://cdn.simpleicons.org/ferrari/ED1131",
+  Mercedes: "https://cdn.simpleicons.org/mercedes/00A19B",
+  McLaren: "https://cdn.simpleicons.org/mclaren/F58020",
+  "Red Bull Racing": "https://cdn.simpleicons.org/redbull/1E41FF",
+  "Aston Martin": "https://cdn.simpleicons.org/astonmartin/00665E",
+  Alpine: "https://cdn.simpleicons.org/alpine/0F70CE",
+  Williams: "https://cdn.simpleicons.org/williams/005AFF",
+  Audi: "https://cdn.simpleicons.org/audi/111111",
+  Cadillac: "https://cdn.simpleicons.org/cadillac/0A2240"
+};
+
 const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
@@ -40,39 +52,6 @@ const SPORT_META = {
     tag: "NBA LAYOUT",
     headline: "Shot geography, efficiency ranking, and conference pressure"
   }
-};
-
-const MODULE_STEPS = {
-  f1: [
-    "Pull current driver standings, constructor standings, and next race metadata from Ergast in parallel.",
-    "Resolve race countdown from race date and time, then refresh every 60 seconds for live temporal context.",
-    "Convert circuit coordinates to a weather lookup using Open-Meteo and render current temperature and wind.",
-    "Render an interactive standings list, persist selected driver as favorite, and refresh profile state on selection.",
-    "Build driver profile cards for points, wins, and rank, then draw trajectory as cumulative points per round.",
-    "Compute constructor point deltas and map each bar to a primary Bauhaus color for instant hierarchy scanning.",
-    "Run head-to-head summaries by averaging qualifying grid and finishing position for two selected drivers."
-  ],
-  football: [
-    "Request league standings and fixture states from API-Football or Football-Data.org.",
-    "Normalize team, points, goal difference, and form metrics into reusable card schema.",
-    "Render league tables, top scorers, and active match centers in the same dashboard composition used by F1.",
-    "Attach optional pitch-zone visual layer for heat and build-up pattern overlays.",
-    "Persist user league and team preferences in local storage for instant return context."
-  ],
-  cricket: [
-    "Ingest live match feed and over summaries from CricketData.org or Cricbuzz API.",
-    "Normalize batting and bowling events into consistent event objects with over, ball, and run metadata.",
-    "Render innings tempo, wicket worm trends, and strike-rate cards with module-level color discipline.",
-    "Map run directions into wagon wheel segments and bind hover details for shot distribution analysis.",
-    "Store preferred team or player profile for persistent dashboard defaulting."
-  ],
-  nba: [
-    "Fetch standings, player efficiency data, and game logs from BallDontLie endpoints.",
-    "Normalize efficiency, pace, and shot location fields into reusable card and chart adapters.",
-    "Render conference pressure cards and player leaderboards with shared visual grammar.",
-    "Build court-zone shot maps with conversion percentages and color-coded risk zones.",
-    "Persist selected conference and player targets to support repeat analysis workflows."
-  ]
 };
 
 const TRACK_PATHS = {
@@ -162,6 +141,10 @@ async function fetchTeamLogoMap(constructors) {
   const entries = await Promise.all(
     constructors.map(async (entry) => {
       const teamName = entry?.Constructor?.name;
+      if (TEAM_LOGO_ASSETS[teamName]) {
+        return [teamName, TEAM_LOGO_ASSETS[teamName]];
+      }
+
       const teamWiki = entry?.Constructor?.url;
       if (!teamName || !teamWiki) {
         return [teamName, ""];
@@ -192,14 +175,23 @@ function setActiveTab() {
   });
 }
 
-function renderModuleSteps() {
-  const list = qs("#detailedSteps");
-  if (!list) {
+function renderQuickIntelStrip({ countdown = "--", raceName = "No race loaded", raceDate = "--", raceTime = "--", leader = "--", gap = "--" }) {
+  const quickCountdown = qs("#quickCountdown");
+  const quickRaceName = qs("#quickRaceName");
+  const quickRaceDate = qs("#quickRaceDate");
+  const quickRaceTime = qs("#quickRaceTime");
+  const quickLeader = qs("#quickLeader");
+  const quickGap = qs("#quickGap");
+  if (!quickCountdown || !quickRaceName || !quickRaceDate || !quickRaceTime || !quickLeader || !quickGap) {
     return;
   }
 
-  const steps = MODULE_STEPS[state.activeModule] || [];
-  list.innerHTML = steps.map((step) => `<li>${step}</li>`).join("");
+  quickCountdown.textContent = countdown;
+  quickRaceName.textContent = raceName;
+  quickRaceDate.textContent = raceDate;
+  quickRaceTime.textContent = raceTime;
+  quickLeader.textContent = leader;
+  quickGap.textContent = gap;
 }
 
 function setHeaderMeta() {
@@ -229,12 +221,22 @@ function formatCountdown(targetIso) {
   const dayMs = 1000 * 60 * 60 * 24;
   const hourMs = 1000 * 60 * 60;
   const minuteMs = 1000 * 60;
+  const secondMs = 1000;
 
   const days = Math.floor(diff / dayMs);
   const hours = Math.floor((diff % dayMs) / hourMs);
   const minutes = Math.floor((diff % hourMs) / minuteMs);
+  const seconds = Math.floor((diff % minuteMs) / secondMs);
 
-  return `${days}d ${hours}h ${minutes}m`;
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+function getAvatarUrl(headshot, displayName) {
+  if (headshot) {
+    return headshot;
+  }
+  const initials = initialsFromName(displayName);
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&size=128&background=111111&color=ffffff&rounded=false&bold=true`;
 }
 
 function createStatCard({ title, value, subtitle }) {
@@ -356,13 +358,14 @@ function renderStandingsList(drivers) {
       const points = driver.points;
       const isActive = state.f1.selectedDriverId === id;
       const media = state.f1.driverMediaMap[(code || "").toUpperCase()] || {};
-      const headshot = media.headshotUrl || "";
       const driverName = `${driver.Driver.givenName} ${driver.Driver.familyName}`;
+      const avatarUrl = getAvatarUrl(media.headshotUrl, driverName);
+      const fallbackAvatar = getAvatarUrl("", driverName);
 
       return `
         <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
           <div class="driver-item-main">
-            <img class="driver-avatar" src="${escapeHtml(headshot)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.style.display='none'" />
+            <img class="driver-avatar" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(fallbackAvatar)}'" />
             <div class="driver-copy">
               <strong>#${driver.position} ${driverName} (${code})</strong>
               <span>${team} | ${points} pts</span>
@@ -517,18 +520,22 @@ function renderMiniStandingsRows(rows, type) {
 }
 
 function setupCountdown(raceDateIso) {
-  clearF1Intervals();
   const countdownEl = qs("#countdownValue");
   if (!countdownEl || !raceDateIso) {
     return;
   }
 
   const update = () => {
-    countdownEl.textContent = formatCountdown(raceDateIso);
+    const countdownText = formatCountdown(raceDateIso);
+    countdownEl.textContent = countdownText;
+    const quickCountdown = qs("#quickCountdown");
+    if (quickCountdown) {
+      quickCountdown.textContent = countdownText;
+    }
   };
 
   update();
-  state.f1.countdownTicker = setInterval(update, 60000);
+  state.f1.countdownTicker = setInterval(update, 1000);
 }
 
 function setupDriverListEvents() {
@@ -703,6 +710,15 @@ async function renderF1() {
   renderF1Skeleton();
   clearF1Intervals();
 
+  renderQuickIntelStrip({
+    countdown: "Loading...",
+    raceName: "Fetching next Grand Prix",
+    raceDate: "Loading...",
+    raceTime: "Loading...",
+    leader: "Loading...",
+    gap: "Calculating"
+  });
+
   try {
     const { drivers, constructors, nextRace, lastRaceResults, lastQualifying } = await fetchF1CoreData();
     state.f1.drivers = drivers;
@@ -730,6 +746,19 @@ async function renderF1() {
     qs("#raceDay").textContent = raceDateParts.weekday;
     qs("#raceDate").textContent = raceDateParts.dateLabel;
     qs("#raceTime").textContent = raceDateParts.timeLabel;
+
+    const leader = drivers[0];
+    const second = drivers[1];
+    const leaderName = leader ? `${leader.Driver.givenName} ${leader.Driver.familyName}` : "No leader";
+    const pointsGap = leader && second ? `${toNum(leader.points) - toNum(second.points)} pts over P2` : "Gap unavailable";
+    renderQuickIntelStrip({
+      countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
+      raceName: nextRace?.raceName || "No upcoming race",
+      raceDate: `${raceDateParts.weekday}, ${raceDateParts.dateLabel}`,
+      raceTime: `${raceDateParts.timeLabel} UTC`,
+      leader: leaderName,
+      gap: pointsGap
+    });
 
     setupCountdown(raceDateIso);
 
@@ -771,12 +800,14 @@ async function renderF1() {
     const selectedTeamName = selectedDriver?.Constructors?.[0]?.name || "";
     const selectedTeamLogo = state.f1.teamLogoMap[selectedTeamName] || "";
     const selectedDriverName = `${selectedDriver?.Driver?.givenName || ""} ${selectedDriver?.Driver?.familyName || ""}`.trim();
+    const selectedAvatar = getAvatarUrl(selectedMedia.headshotUrl, selectedDriverName);
+    const selectedAvatarFallback = getAvatarUrl("", selectedDriverName);
 
     profileNode.insertAdjacentHTML(
       "beforebegin",
       `
       <div class="profile-hero" id="profileHero">
-        <img src="${escapeHtml(selectedMedia.headshotUrl || "")}" alt="${escapeHtml(selectedDriverName)}" loading="lazy" onerror="this.style.display='none'" />
+        <img src="${escapeHtml(selectedAvatar)}" alt="${escapeHtml(selectedDriverName)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(selectedAvatarFallback)}'" />
         <div>
           <p class="kicker">Selected Driver</p>
           <strong>${escapeHtml(selectedDriverName || "Driver")}</strong>
@@ -811,6 +842,14 @@ async function renderF1() {
     const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
   } catch (error) {
+    renderQuickIntelStrip({
+      countdown: "Unavailable",
+      raceName: "Data feed issue",
+      raceDate: "Unavailable",
+      raceTime: "Unavailable",
+      leader: "Unavailable",
+      gap: "Unavailable"
+    });
     qs("#dashboardGrid").innerHTML = `
       <article class="glass-card card-span-12">
         <h3 class="card-title">Data Stream Interrupted</h3>
@@ -948,10 +987,17 @@ function renderNBA() {
 function renderModule() {
   setActiveTab();
   setHeaderMeta();
-  renderModuleSteps();
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
+    renderQuickIntelStrip({
+      countdown: "Switch to F1",
+      raceName: "Quick cards are tuned for Formula 1",
+      raceDate: "--",
+      raceTime: "--",
+      leader: "--",
+      gap: "--"
+    });
   }
 
   switch (state.activeModule) {
