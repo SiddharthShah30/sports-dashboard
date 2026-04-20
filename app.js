@@ -37,19 +37,19 @@ const state = {
 
 const SPORT_META = {
   f1: {
-    tag: "F1 BLUEPRINT",
-    headline: "Minimal command architecture for high-frequency race context"
+    tag: "FORMULA 1 LIVE CENTER",
+    headline: "Trackside timing, standings, and race intelligence in one cockpit"
   },
   football: {
-    tag: "FOOTBALL GRID",
+    tag: "FOOTBALL LIVE CENTER",
     headline: "Structured league intelligence with modular match centers"
   },
   cricket: {
-    tag: "CRICKET CORE",
+    tag: "CRICKET LIVE CENTER",
     headline: "Over-by-over telemetry translated into geometric insight"
   },
   nba: {
-    tag: "NBA LAYOUT",
+    tag: "NBA LIVE CENTER",
     headline: "Shot geography, efficiency ranking, and conference pressure"
   }
 };
