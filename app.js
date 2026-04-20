@@ -3,12 +3,16 @@ const STORAGE_KEYS = {
   favoriteDriver: "paddock:favoriteDriver"
 };
 
+const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
+
 const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
   f1: {
     drivers: [],
     constructors: [],
+    lastRaceResults: [],
+    lastQualifying: [],
     selectedDriverId: "",
     nextRace: null,
     countdownTicker: null,
@@ -18,21 +22,54 @@ const state = {
 
 const SPORT_META = {
   f1: {
-    tag: "F1 COMMAND CENTER",
-    headline: "Live telemetry-inspired race intelligence"
+    tag: "F1 BLUEPRINT",
+    headline: "Minimal command architecture for high-frequency race context"
   },
   football: {
-    tag: "FOOTBALL MATCH OPS",
-    headline: "League state, race analytics, and tactical overlays"
+    tag: "FOOTBALL GRID",
+    headline: "Structured league intelligence with modular match centers"
   },
   cricket: {
-    tag: "CRICKET PERFORMANCE HUB",
-    headline: "Ball-by-ball momentum and batter impact profiling"
+    tag: "CRICKET CORE",
+    headline: "Over-by-over telemetry translated into geometric insight"
   },
   nba: {
-    tag: "NBA INTEL DECK",
-    headline: "Efficiency metrics, shot zones, and conference pressure"
+    tag: "NBA LAYOUT",
+    headline: "Shot geography, efficiency ranking, and conference pressure"
   }
+};
+
+const MODULE_STEPS = {
+  f1: [
+    "Pull current driver standings, constructor standings, and next race metadata from Ergast in parallel.",
+    "Resolve race countdown from race date and time, then refresh every 60 seconds for live temporal context.",
+    "Convert circuit coordinates to a weather lookup using Open-Meteo and render current temperature and wind.",
+    "Render an interactive standings list, persist selected driver as favorite, and refresh profile state on selection.",
+    "Build driver profile cards for points, wins, and rank, then draw trajectory as cumulative points per round.",
+    "Compute constructor point deltas and map each bar to a primary Bauhaus color for instant hierarchy scanning.",
+    "Run head-to-head summaries by averaging qualifying grid and finishing position for two selected drivers."
+  ],
+  football: [
+    "Request league standings and fixture states from API-Football or Football-Data.org.",
+    "Normalize team, points, goal difference, and form metrics into reusable card schema.",
+    "Render league tables, top scorers, and active match centers in the same dashboard composition used by F1.",
+    "Attach optional pitch-zone visual layer for heat and build-up pattern overlays.",
+    "Persist user league and team preferences in local storage for instant return context."
+  ],
+  cricket: [
+    "Ingest live match feed and over summaries from CricketData.org or Cricbuzz API.",
+    "Normalize batting and bowling events into consistent event objects with over, ball, and run metadata.",
+    "Render innings tempo, wicket worm trends, and strike-rate cards with module-level color discipline.",
+    "Map run directions into wagon wheel segments and bind hover details for shot distribution analysis.",
+    "Store preferred team or player profile for persistent dashboard defaulting."
+  ],
+  nba: [
+    "Fetch standings, player efficiency data, and game logs from BallDontLie endpoints.",
+    "Normalize efficiency, pace, and shot location fields into reusable card and chart adapters.",
+    "Render conference pressure cards and player leaderboards with shared visual grammar.",
+    "Build court-zone shot maps with conversion percentages and color-coded risk zones.",
+    "Persist selected conference and player targets to support repeat analysis workflows."
+  ]
 };
 
 const TRACK_PATHS = {
@@ -71,6 +108,18 @@ async function fetchJSON(url) {
   }
 }
 
+async function fetchErgast(path) {
+  let lastError = null;
+  for (const base of ERGAST_BASES) {
+    try {
+      return await fetchJSON(`${base}${path}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("Unable to load Ergast data");
+}
+
 function setActiveTab() {
   qsa(".tab-btn").forEach((button) => {
     const isActive = button.dataset.module === state.activeModule;
@@ -79,11 +128,22 @@ function setActiveTab() {
   });
 }
 
+function renderModuleSteps() {
+  const list = qs("#detailedSteps");
+  if (!list) {
+    return;
+  }
+
+  const steps = MODULE_STEPS[state.activeModule] || [];
+  list.innerHTML = steps.map((step) => `<li>${step}</li>`).join("");
+}
+
 function setHeaderMeta() {
   const meta = SPORT_META[state.activeModule];
   qs("#moduleTag").textContent = meta.tag;
   qs("#moduleHeadline").textContent = meta.headline;
   qs("#favoriteLabel").textContent = `Favorite Driver: ${state.favoriteDriver || "None"}`;
+  document.body.setAttribute("data-module", state.activeModule);
 }
 
 function clearF1Intervals() {
@@ -126,26 +186,30 @@ function getTrackPathByCircuit(circuitId) {
 }
 
 function safeTeamColor(index) {
-  const palette = ["#35e0a1", "#ff5f66", "#ffd166", "#4ac8ff", "#f08bff", "#8aff80", "#ff9f43"];
+  const palette = ["#e63926", "#1459d9", "#f1c40f", "#101010", "#e63926", "#1459d9", "#f1c40f"];
   return palette[index % palette.length];
 }
 
 async function fetchF1CoreData() {
-  const [driverData, constructorData, nextRaceData] = await Promise.all([
-    fetchJSON("https://ergast.com/api/f1/current/driverStandings.json"),
-    fetchJSON("https://ergast.com/api/f1/current/constructorStandings.json"),
-    fetchJSON("https://ergast.com/api/f1/current/next.json")
+  const [driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData] = await Promise.all([
+    fetchErgast("/current/driverStandings.json"),
+    fetchErgast("/current/constructorStandings.json"),
+    fetchErgast("/current/next.json"),
+    fetchErgast("/current/last/results.json"),
+    fetchErgast("/current/last/qualifying.json")
   ]);
 
   const drivers = driverData?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
   const constructors = constructorData?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
   const nextRace = nextRaceData?.MRData?.RaceTable?.Races?.[0] || null;
+  const lastRaceResults = lastResultsData?.MRData?.RaceTable?.Races?.[0]?.Results || [];
+  const lastQualifying = lastQualifyingData?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
 
-  return { drivers, constructors, nextRace };
+  return { drivers, constructors, nextRace, lastRaceResults, lastQualifying };
 }
 
 async function fetchDriverTrajectory(driverId) {
-  const data = await fetchJSON(`https://ergast.com/api/f1/current/drivers/${driverId}/results.json?limit=100`);
+  const data = await fetchErgast(`/current/drivers/${driverId}/results.json?limit=100`);
   const races = data?.MRData?.RaceTable?.Races || [];
 
   let total = 0;
@@ -165,8 +229,8 @@ async function fetchDriverTrajectory(driverId) {
 
 async function fetchDriverComparison(driverIdA, driverIdB) {
   const [dataA, dataB] = await Promise.all([
-    fetchJSON(`https://ergast.com/api/f1/current/drivers/${driverIdA}/results.json?limit=100`),
-    fetchJSON(`https://ergast.com/api/f1/current/drivers/${driverIdB}/results.json?limit=100`)
+    fetchErgast(`/current/drivers/${driverIdA}/results.json?limit=100`),
+    fetchErgast(`/current/drivers/${driverIdB}/results.json?limit=100`)
   ]);
 
   function summarize(raceData) {
@@ -212,7 +276,7 @@ async function fetchTrackWeather(lat, lon) {
     if (!current) {
       return "Weather unavailable";
     }
-    return `${current.temperature_2m}°C | Wind ${current.wind_speed_10m} km/h | Code ${current.weather_code}`;
+    return `${current.temperature_2m}C | Wind ${current.wind_speed_10m} km/h | Code ${current.weather_code}`;
   } catch (error) {
     return "Weather unavailable";
   }
@@ -230,7 +294,7 @@ function renderStandingsList(drivers) {
       return `
         <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
           <strong>#${driver.position} ${driver.Driver.givenName} ${driver.Driver.familyName} (${code})</strong>
-          <span>${team} · ${points} pts</span>
+          <span>${team} | ${points} pts</span>
         </button>
       `;
     })
@@ -253,7 +317,7 @@ function renderConstructorBars(constructors) {
             <span>${entry.points} pts</span>
           </div>
           <div class="progress-wrap">
-            <div class="progress-fill" style="width:${pct}%;background:linear-gradient(90deg, ${color}, rgba(255,255,255,0.35));"></div>
+            <div class="progress-fill" style="width:${pct}%;background:${color};"></div>
           </div>
         </div>
       `;
@@ -268,6 +332,75 @@ function renderTrackMap(circuitId) {
       <svg viewBox="0 0 280 160" role="img" aria-label="Circuit mini map">
         <path class="track-line" d="${path}"></path>
       </svg>
+    </div>
+  `;
+}
+
+function formatRaceDateTime(date, time) {
+  if (!date) {
+    return { weekday: "TBD", dateLabel: "TBD", timeLabel: "TBD" };
+  }
+
+  const iso = `${date}T${time || "00:00:00Z"}`;
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) {
+    return { weekday: "TBD", dateLabel: date, timeLabel: time || "TBD" };
+  }
+
+  return {
+    weekday: new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(dt),
+    dateLabel: new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      timeZone: "UTC"
+    }).format(dt),
+    timeLabel: new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "UTC"
+    }).format(dt)
+  };
+}
+
+function renderMiniStandingsRows(rows, type) {
+  if (!rows.length) {
+    return "<p class='empty-state'>No standings data available.</p>";
+  }
+
+  const topRows = rows.slice(0, 10);
+  if (type === "qualifying") {
+    return `
+      <div class="mini-table">
+        ${topRows
+          .map(
+            (row) => `
+          <div class="mini-row">
+            <span>P${row.position}</span>
+            <span>${row.Driver.givenName} ${row.Driver.familyName}</span>
+            <span>${row.Q3 || row.Q2 || row.Q1 || "-"}</span>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="mini-table">
+      ${topRows
+        .map(
+          (row) => `
+        <div class="mini-row">
+          <span>P${row.position}</span>
+          <span>${row.Driver.givenName} ${row.Driver.familyName}</span>
+          <span>${row.points} pts</span>
+        </div>
+      `
+        )
+        .join("")}
     </div>
   `;
 }
@@ -370,8 +503,8 @@ function upsertTrajectoryChart(labels, values) {
         {
           label: "Cumulative Points",
           data: values,
-          borderColor: "#35e0a1",
-          backgroundColor: "rgba(53, 224, 161, 0.18)",
+          borderColor: "#1459d9",
+          backgroundColor: "rgba(20, 89, 217, 0.17)",
           borderWidth: 2,
           tension: 0.28,
           fill: true,
@@ -384,18 +517,18 @@ function upsertTrajectoryChart(labels, values) {
       plugins: {
         legend: {
           labels: {
-            color: "#d4ddf1"
+            color: "#101010"
           }
         }
       },
       scales: {
         x: {
-          ticks: { color: "#9fb0cf" },
-          grid: { color: "rgba(255,255,255,0.06)" }
+          ticks: { color: "#303030" },
+          grid: { color: "rgba(0,0,0,0.12)" }
         },
         y: {
-          ticks: { color: "#9fb0cf" },
-          grid: { color: "rgba(255,255,255,0.06)" }
+          ticks: { color: "#303030" },
+          grid: { color: "rgba(0,0,0,0.12)" }
         }
       }
     }
@@ -407,6 +540,9 @@ function renderF1Skeleton() {
   grid.innerHTML = `
     <article class="glass-card card-span-4 card-entry">
       <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+      <p><strong>Day:</strong> <span id="raceDay">Loading...</span></p>
+      <p><strong>Date:</strong> <span id="raceDate">Loading...</span></p>
+      <p><strong>Time (UTC):</strong> <span id="raceTime">Loading...</span></p>
       <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
       <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
       <div id="trackMapContainer"></div>
@@ -425,18 +561,28 @@ function renderF1Skeleton() {
       </div>
     </article>
 
-    <article class="glass-card card-span-6 card-entry">
+    <article class="glass-card card-span-4 card-entry">
       <h3 class="card-title">Constructor Battle <span class="inline-meta">Points gap visualizer</span></h3>
       <div id="constructorBars"></div>
     </article>
 
-    <article class="glass-card card-span-6 card-entry">
+    <article class="glass-card card-span-4 card-entry">
+      <h3 class="card-title">Last Race Result Standings</h3>
+      <div id="lastRaceStandings"></div>
+    </article>
+
+    <article class="glass-card card-span-4 card-entry">
+      <h3 class="card-title">Last Qualifying Standings</h3>
+      <div id="lastQualifyingStandings"></div>
+    </article>
+
+    <article class="glass-card card-span-12 card-entry">
       <h3 class="card-title">Head-to-Head Tool</h3>
       <div class="split" style="margin-bottom:0.75rem;">
         <select id="driverA" class="select-input"></select>
         <select id="driverB" class="select-input"></select>
       </div>
-      <button id="compareBtn" class="small-btn">Compare Qualifying Pace & Race Finishes</button>
+      <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
       <div id="comparisonResult" style="margin-top:0.75rem;"></div>
     </article>
   `;
@@ -446,19 +592,25 @@ async function renderF1() {
   renderF1Skeleton();
 
   try {
-    const { drivers, constructors, nextRace } = await fetchF1CoreData();
+    const { drivers, constructors, nextRace, lastRaceResults, lastQualifying } = await fetchF1CoreData();
     state.f1.drivers = drivers;
     state.f1.constructors = constructors;
     state.f1.nextRace = nextRace;
+    state.f1.lastRaceResults = lastRaceResults;
+    state.f1.lastQualifying = lastQualifying;
 
     if (!state.f1.selectedDriverId) {
       state.f1.selectedDriverId = state.favoriteDriver || drivers[0]?.Driver?.driverId || "";
     }
 
     const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
+    const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
     qs("#raceMeta").textContent = nextRace
-      ? `${nextRace.raceName} · ${nextRace.Circuit.Location.locality}`
+      ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
       : "No race scheduled";
+    qs("#raceDay").textContent = raceDateParts.weekday;
+    qs("#raceDate").textContent = raceDateParts.dateLabel;
+    qs("#raceTime").textContent = raceDateParts.timeLabel;
 
     setupCountdown(raceDateIso);
 
@@ -473,6 +625,8 @@ async function renderF1() {
     setupDriverListEvents();
 
     qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
+    qs("#lastRaceStandings").innerHTML = renderMiniStandingsRows(lastRaceResults, "race");
+    qs("#lastQualifyingStandings").innerHTML = renderMiniStandingsRows(lastQualifying, "qualifying");
 
     const optionsHtml = drivers
       .map((entry) => {
@@ -561,7 +715,7 @@ function renderFootball() {
     <article class="glass-card card-span-5 card-entry">
       <h3 class="card-title">Adapter Endpoint</h3>
       <p class="empty-state">Plug in API-Football or Football-Data.org key and map to the reusable card schema.</p>
-      <pre style="white-space: pre-wrap; color: #d4ddf1;">fetch("https://api.football-data.org/v4/competitions/PL/standings", {
+      <pre class="code-callout">fetch("https://api.football-data.org/v4/competitions/PL/standings", {
   headers: { "X-Auth-Token": "YOUR_KEY" }
 });</pre>
     </article>
@@ -592,10 +746,10 @@ function renderCricket() {
       <p class="empty-state">Render scoring vectors from ball-by-ball coordinates when data source is attached.</p>
       <div class="track-map">
         <svg viewBox="0 0 280 160" role="img" aria-label="Cricket wagon wheel placeholder">
-          <circle cx="140" cy="80" r="58" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"></circle>
-          <line x1="140" y1="80" x2="212" y2="62" stroke="#35e0a1" stroke-width="3"></line>
-          <line x1="140" y1="80" x2="80" y2="48" stroke="#ff7f50" stroke-width="3"></line>
-          <line x1="140" y1="80" x2="148" y2="20" stroke="#4ac8ff" stroke-width="3"></line>
+          <circle cx="140" cy="80" r="58" fill="none" stroke="rgba(0,0,0,0.32)" stroke-width="2"></circle>
+          <line x1="140" y1="80" x2="212" y2="62" stroke="#1459d9" stroke-width="3"></line>
+          <line x1="140" y1="80" x2="80" y2="48" stroke="#e63926" stroke-width="3"></line>
+          <line x1="140" y1="80" x2="148" y2="20" stroke="#f1c40f" stroke-width="3"></line>
         </svg>
       </div>
     </article>
@@ -603,7 +757,7 @@ function renderCricket() {
     <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Adapter Endpoint</h3>
       <p class="empty-state">Attach CricketData.org or Cricbuzz API via RapidAPI and normalize events into over-by-over cards.</p>
-      <pre style="white-space: pre-wrap; color: #d4ddf1;">fetch("https://api.cricapi.com/v1/currentMatches?apikey=YOUR_KEY&offset=0");</pre>
+      <pre class="code-callout">fetch("https://api.cricapi.com/v1/currentMatches?apikey=YOUR_KEY&offset=0");</pre>
     </article>
     `
   );
@@ -632,12 +786,12 @@ function renderNBA() {
       <p class="empty-state">Use BallDontLie events to map shot efficiency by court region with the same reusable card component system.</p>
       <div class="track-map">
         <svg viewBox="0 0 280 160" role="img" aria-label="Basketball shot chart placeholder">
-          <rect x="30" y="20" width="220" height="120" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2"></rect>
-          <path d="M140 20 L140 140" stroke="rgba(255,255,255,0.2)" stroke-width="2"></path>
-          <circle cx="80" cy="70" r="8" fill="#35e0a1"></circle>
-          <circle cx="128" cy="95" r="8" fill="#35e0a1"></circle>
-          <circle cx="190" cy="78" r="8" fill="#ff7f50"></circle>
-          <circle cx="220" cy="102" r="8" fill="#ff5f66"></circle>
+          <rect x="30" y="20" width="220" height="120" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="2"></rect>
+          <path d="M140 20 L140 140" stroke="rgba(0,0,0,0.3)" stroke-width="2"></path>
+          <circle cx="80" cy="70" r="8" fill="#1459d9"></circle>
+          <circle cx="128" cy="95" r="8" fill="#1459d9"></circle>
+          <circle cx="190" cy="78" r="8" fill="#f1c40f"></circle>
+          <circle cx="220" cy="102" r="8" fill="#e63926"></circle>
         </svg>
       </div>
     </article>
@@ -645,7 +799,7 @@ function renderNBA() {
     <article class="glass-card card-span-4 card-entry">
       <h3 class="card-title">Adapter Endpoint</h3>
       <p class="empty-state">BallDontLie is open and clean for standings, players, and game logs.</p>
-      <pre style="white-space: pre-wrap; color: #d4ddf1;">fetch("https://api.balldontlie.io/v1/players", {
+      <pre class="code-callout">fetch("https://api.balldontlie.io/v1/players", {
   headers: { Authorization: "YOUR_KEY" }
 });</pre>
     </article>
@@ -656,6 +810,7 @@ function renderNBA() {
 function renderModule() {
   setActiveTab();
   setHeaderMeta();
+  renderModuleSteps();
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
