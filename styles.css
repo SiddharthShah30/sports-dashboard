@@ -188,6 +188,10 @@ body {
   height: 36px;
 }
 
+.top-search {
+  min-width: 240px;
+}
+
 .glass-card {
   background: linear-gradient(145deg, var(--surface), var(--surface-2));
   border: 1px solid var(--line);
@@ -276,6 +280,24 @@ body {
   margin: 0.3rem 0 0;
   color: var(--text-1);
   font-size: 0.9rem;
+}
+
+.season-progress-wrap {
+  margin-top: 0.42rem;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.season-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.95), rgba(255, 255, 255, 0.75));
+  transition: width 420ms ease;
 }
 
 .dashboard-grid {
@@ -768,6 +790,48 @@ body {
 .news-list {
   display: grid;
   gap: 0.52rem;
+}
+
+.tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.tab-strip .small-btn.active {
+  background: linear-gradient(120deg, rgba(var(--accent-rgb), 0.42), rgba(var(--accent-rgb), 0.2));
+  border-color: rgba(var(--accent-rgb), 0.85);
+}
+
+.info-panel {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  max-height: 260px;
+  overflow: auto;
+  padding: 0.55rem;
+}
+
+.info-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.56rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.info-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+  color: var(--text-2);
+  font-size: 0.8rem;
 }
 
 .news-item {

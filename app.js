@@ -33,7 +33,11 @@ const state = {
     nextRace: null,
     map: null,
     countdownTicker: null,
-    chart: null
+    chart: null,
+    infoView: "teams",
+    searchQuery: "",
+    historyData: [],
+    historyYear: 0
   }
 };
 
@@ -192,14 +196,24 @@ function setActiveTab() {
   });
 }
 
-function renderQuickIntelStrip({ countdown = "--", raceName = "No race loaded", raceDate = "--", raceTime = "--", leader = "--", gap = "--" }) {
+function renderQuickIntelStrip({
+  countdown = "--",
+  raceName = "No race loaded",
+  raceDate = "--",
+  raceTime = "--",
+  leader = "--",
+  gap = "--",
+  seasonCompleted = 0,
+  seasonTotal = 0
+}) {
   const quickCountdown = qs("#quickCountdown");
   const quickRaceName = qs("#quickRaceName");
   const quickRaceDate = qs("#quickRaceDate");
   const quickRaceTime = qs("#quickRaceTime");
   const quickLeader = qs("#quickLeader");
   const quickGap = qs("#quickGap");
-  if (!quickCountdown || !quickRaceName || !quickRaceDate || !quickRaceTime || !quickLeader || !quickGap) {
+  const seasonBar = qs("#quickSeasonProgress");
+  if (!quickCountdown || !quickRaceName || !quickRaceDate || !quickRaceTime || !quickLeader || !quickGap || !seasonBar) {
     return;
   }
 
@@ -209,6 +223,8 @@ function renderQuickIntelStrip({ countdown = "--", raceName = "No race loaded", 
   quickRaceTime.textContent = raceTime;
   quickLeader.textContent = leader;
   quickGap.textContent = gap;
+  const pct = seasonTotal > 0 ? Math.min(100, Math.max(0, (seasonCompleted / seasonTotal) * 100)) : 0;
+  seasonBar.style.width = `${pct}%`;
 }
 
 function setHeaderMeta() {
@@ -884,6 +900,136 @@ async function fetchLatestNews() {
   }
 }
 
+async function fetchPreviousYearsChampions(startYear, count = 8) {
+  const years = [];
+  for (let year = startYear - 1; year >= Math.max(1950, startYear - count); year -= 1) {
+    years.push(year);
+  }
+
+  const champions = await Promise.all(
+    years.map(async (year) => {
+      try {
+        const data = await fetchErgast(`/${year}/driverStandings.json`);
+        const top = data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings?.[0];
+        if (!top) {
+          return null;
+        }
+        return {
+          year,
+          champion: `${top.Driver.givenName} ${top.Driver.familyName}`,
+          team: top.Constructors?.[0]?.name || "Unknown",
+          points: top.points || "0",
+          wins: top.wins || "0"
+        };
+      } catch (error) {
+        return null;
+      }
+    })
+  );
+
+  return champions.filter(Boolean);
+}
+
+function getFilteredExplorerRows(rows, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return rows;
+  }
+  return rows.filter((row) => row.searchText.toLowerCase().includes(q));
+}
+
+function renderInfoExplorer(drivers, constructors) {
+  const panel = qs("#infoPanel");
+  if (!panel) {
+    return;
+  }
+
+  const tabs = qsa("#infoTabs [data-view]");
+  tabs.forEach((tab) => {
+    const active = tab.dataset.view === state.f1.infoView;
+    tab.classList.toggle("active", active);
+  });
+
+  let rows = [];
+  if (state.f1.infoView === "teams") {
+    rows = constructors.map((entry) => ({
+      title: entry.Constructor.name,
+      metaLeft: `${entry.points} pts`,
+      metaRight: `${entry.wins} wins`,
+      searchText: `${entry.Constructor.name} ${entry.points} ${entry.wins}`
+    }));
+  } else if (state.f1.infoView === "drivers") {
+    rows = drivers.map((entry) => ({
+      title: `${entry.Driver.givenName} ${entry.Driver.familyName}`,
+      metaLeft: `${entry.points} pts | ${entry.wins} wins`,
+      metaRight: entry.Constructors?.[0]?.name || "Unknown team",
+      searchText: `${entry.Driver.givenName} ${entry.Driver.familyName} ${entry.Constructors?.[0]?.name || ""}`
+    }));
+  } else {
+    rows = state.f1.historyData.map((item) => ({
+      title: `${item.year} Champion: ${item.champion}`,
+      metaLeft: `${item.team}`,
+      metaRight: `${item.points} pts | ${item.wins} wins`,
+      searchText: `${item.year} ${item.champion} ${item.team}`
+    }));
+  }
+
+  const filtered = getFilteredExplorerRows(rows, state.f1.searchQuery);
+  if (!filtered.length) {
+    panel.innerHTML = "<p class='empty-state'>No matching results.</p>";
+    return;
+  }
+
+  panel.innerHTML = filtered
+    .map(
+      (row) => `
+      <div class="info-item">
+        <strong>${escapeHtml(row.title)}</strong>
+        <div class="info-meta">
+          <span>${escapeHtml(row.metaLeft)}</span>
+          <span>${escapeHtml(row.metaRight)}</span>
+        </div>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function setupInfoExplorerControls(drivers, constructors) {
+  const topSearch = qs("#globalSearchInput");
+  const localSearch = qs("#infoSearchInput");
+  const tabs = qsa("#infoTabs [data-view]");
+
+  if (topSearch) {
+    topSearch.value = state.f1.searchQuery;
+    topSearch.oninput = () => {
+      state.f1.searchQuery = topSearch.value;
+      if (localSearch) {
+        localSearch.value = topSearch.value;
+      }
+      renderInfoExplorer(drivers, constructors);
+    };
+  }
+
+  if (localSearch) {
+    localSearch.value = state.f1.searchQuery;
+    localSearch.oninput = () => {
+      state.f1.searchQuery = localSearch.value;
+      if (topSearch) {
+        topSearch.value = localSearch.value;
+      }
+      renderInfoExplorer(drivers, constructors);
+    };
+  }
+
+  tabs.forEach((tab) => {
+    tab.onclick = () => {
+      state.f1.infoView = tab.dataset.view;
+      renderInfoExplorer(drivers, constructors);
+    };
+  });
+}
+
 function renderNewsList(newsItems) {
   const container = qs("#newsList");
   if (!container) {
@@ -908,6 +1054,7 @@ function renderNewsList(newsItems) {
 function setupKnowledgeHub() {
   const input = qs("#knowledgeInput");
   const button = qs("#knowledgeSearchBtn");
+  const button2 = qs("#knowledgeSearchBtn2");
   const output = qs("#knowledgeOutput");
   const pills = qsa("#knowledgePills [data-topic]");
   if (!input || !button || !output) {
@@ -930,6 +1077,9 @@ function setupKnowledgeHub() {
   };
 
   button.onclick = runSearch;
+  if (button2) {
+    button2.onclick = runSearch;
+  }
   pills.forEach((pill) => {
     pill.onclick = async () => {
       input.value = pill.dataset.topic || "Formula One";
@@ -1041,12 +1191,12 @@ function renderF1Skeleton() {
       </div>
     </article>
 
-    <article class="glass-card card-span-3 card-entry">
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
       <div id="driverStandings" class="data-list"></div>
     </article>
 
-    <article class="glass-card card-span-3 card-entry">
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Driver Profile Card</h3>
       <div id="profileStats" class="stats-row"></div>
       <div style="height: 190px; margin-top: 0.8rem;">
@@ -1054,22 +1204,12 @@ function renderF1Skeleton() {
       </div>
     </article>
 
-    <article class="glass-card card-span-4 card-entry">
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Constructor Battle <span class="inline-meta">Points gap visualizer</span></h3>
       <div id="constructorBars"></div>
     </article>
 
-    <article class="glass-card card-span-4 card-entry">
-      <h3 class="card-title">Last Race Result Standings</h3>
-      <div id="lastRaceStandings"></div>
-    </article>
-
-    <article class="glass-card card-span-4 card-entry">
-      <h3 class="card-title">Last Qualifying Standings</h3>
-      <div id="lastQualifyingStandings"></div>
-    </article>
-
-    <article class="glass-card card-span-8 card-entry">
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Head-to-Head Tool</h3>
       <div class="split" style="margin-bottom:0.75rem;">
         <select id="driverA" class="select-input"></select>
@@ -1079,17 +1219,15 @@ function renderF1Skeleton() {
       <div id="comparisonResult" style="margin-top:0.75rem;"></div>
     </article>
 
-    <article class="glass-card card-span-4 card-entry">
-      <h3 class="card-title">Season Intelligence</h3>
-      <div id="seasonSnapshot" class="mini-table">
-        <p class="empty-state">Loading season snapshot...</p>
-      </div>
-    </article>
-
     <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Knowledge Hub</h3>
+      <h3 class="card-title">F1 Information Explorer</h3>
+      <div id="infoTabs" class="tab-strip">
+        <button class="small-btn active" data-view="teams">Teams</button>
+        <button class="small-btn" data-view="drivers">Drivers</button>
+        <button class="small-btn" data-view="years">Previous Years</button>
+      </div>
       <div class="split" style="margin-bottom:0.6rem;">
-        <input id="knowledgeInput" class="select-input" placeholder="Search teams, drivers, principals, legends" />
+        <input id="infoSearchInput" class="select-input" placeholder="Filter teams, drivers, champions" />
         <button id="knowledgeSearchBtn" class="small-btn">Search Wiki</button>
       </div>
       <div class="topic-pills" id="knowledgePills">
@@ -1098,12 +1236,19 @@ function renderF1Skeleton() {
         <button class="small-btn" data-topic="Ayrton Senna">Legend</button>
         <button class="small-btn" data-topic="Formula One World Drivers' Championship">Championship History</button>
       </div>
+      <div id="infoPanel" class="info-panel">
+        <p class="empty-state">Loading information...</p>
+      </div>
+      <div class="split" style="margin:0.7rem 0 0.6rem;">
+        <input id="knowledgeInput" class="select-input" placeholder="Read about any F1 subject" />
+        <button id="knowledgeSearchBtn2" class="small-btn">Open Article</button>
+      </div>
       <div id="knowledgeOutput" class="knowledge-output">
         <p class="empty-state">Search any F1 topic to read current and historical context.</p>
       </div>
     </article>
 
-    <article class="glass-card card-span-6 card-entry">
+    <article class="glass-card card-span-12 card-entry">
       <h3 class="card-title">Latest News</h3>
       <div id="newsList" class="news-list">
         <p class="empty-state">Loading latest updates...</p>
@@ -1180,13 +1325,20 @@ async function renderF1() {
     const second = drivers[1];
     const leaderName = leader ? `${leader.Driver.givenName} ${leader.Driver.familyName}` : "No leader";
     const pointsGap = leader && second ? `${toNum(leader.points) - toNum(second.points)} pts over P2` : "Gap unavailable";
+
+    const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
+    const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
+    const seasonSummary = await fetchSeasonSummary(trajectory.labels.length);
+
     renderQuickIntelStrip({
       countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
       raceName: nextRace?.raceName || "No upcoming race",
       raceDate: `${raceDateParts.weekday}, ${raceDateParts.dateLabel}`,
       raceTime: `${raceDateParts.timeLabel} UTC`,
       leader: leaderName,
-      gap: pointsGap
+      gap: `${pointsGap} • ${seasonSummary.completed}/${seasonSummary.totalRounds} rounds`,
+      seasonCompleted: seasonSummary.completed,
+      seasonTotal: seasonSummary.totalRounds
     });
 
     setupCountdown(raceDateIso);
@@ -1207,8 +1359,14 @@ async function renderF1() {
     setupDriverListEvents();
 
     qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
-    qs("#lastRaceStandings").innerHTML = renderMiniStandingsRows(lastRaceResults, "race");
-    qs("#lastQualifyingStandings").innerHTML = renderMiniStandingsRows(lastQualifying, "qualifying");
+
+    const seasonYear = nextRace?.season ? Number(nextRace.season) : new Date().getUTCFullYear();
+    if (state.f1.historyYear !== seasonYear || !state.f1.historyData.length) {
+      state.f1.historyData = await fetchPreviousYearsChampions(seasonYear, 8);
+      state.f1.historyYear = seasonYear;
+    }
+    setupInfoExplorerControls(drivers, constructors);
+    renderInfoExplorer(drivers, constructors);
 
     const optionsHtml = drivers
       .map((entry) => {
@@ -1226,7 +1384,6 @@ async function renderF1() {
     qs("#driverB").value = fallbackB;
     setupHeadToHeadEvents();
 
-    const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
     if (!state.favoriteTeam) {
       state.favoriteTeam = selectedDriver?.Constructors?.[0]?.name || "";
       localStorage.setItem(STORAGE_KEYS.favoriteTeam, state.favoriteTeam);
@@ -1280,20 +1437,7 @@ async function renderF1() {
       })
     );
 
-    const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
-
-    const seasonSummary = await fetchSeasonSummary(trajectory.labels.length);
-    const seasonSnapshotNode = qs("#seasonSnapshot");
-    if (seasonSnapshotNode) {
-      const leaderTeam = selectedDriver?.Constructors?.[0]?.name || "Unknown";
-      seasonSnapshotNode.innerHTML = `
-        <div class="mini-row"><span>Rounds</span><span>${seasonSummary.completed} / ${seasonSummary.totalRounds}</span><span>Done</span></div>
-        <div class="mini-row"><span>Remaining</span><span>${seasonSummary.remaining}</span><span>To race</span></div>
-        <div class="mini-row"><span>Leader</span><span>${leaderName}</span><span>${leader?.points || 0} pts</span></div>
-        <div class="mini-row"><span>Leader Team</span><span>${leaderTeam}</span><span>Current form</span></div>
-      `;
-    }
 
     setupKnowledgeHub();
     const newsItems = await fetchLatestNews();

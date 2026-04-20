@@ -47,6 +47,10 @@
       </div>
       <div class="hero-right">
         <div class="pref-group">
+          <label for="globalSearchInput">Search</label>
+          <input id="globalSearchInput" class="select-input pref-select top-search" placeholder="Search teams, drivers, years" />
+        </div>
+        <div class="pref-group">
           <label for="favoriteTeamSelect">Favorite Team</label>
           <select id="favoriteTeamSelect" class="select-input pref-select">
             <option value="">Select team</option>
@@ -84,9 +88,12 @@
         <p class="quick-sub" id="quickRaceTime">--:--</p>
       </article>
       <article class="glass-card quick-card card-entry">
-        <p class="quick-label">Championship Battle</p>
+        <p class="quick-label">Season Progress</p>
         <p class="quick-value" id="quickLeader">Loading...</p>
-        <p class="quick-sub" id="quickGap">Calculating points gap</p>
+        <div class="season-progress-wrap">
+          <div id="quickSeasonProgress" class="season-progress-bar"></div>
+        </div>
+        <p class="quick-sub" id="quickGap">Loading season rounds</p>
       </article>
     </section>
 
