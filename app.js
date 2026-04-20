@@ -414,6 +414,49 @@ function renderTrackMap(circuitId) {
   `;
 }
 
+function renderStartingGridLayout(qualifyingRows, resultRows) {
+  const sourceRows = qualifyingRows?.length ? qualifyingRows : resultRows || [];
+  if (!sourceRows.length) {
+    return "<p class='empty-state'>Latest grid data unavailable.</p>";
+  }
+
+  const byPosition = new Map();
+  sourceRows.forEach((row) => {
+    const position = toNum(row.position);
+    if (position > 0) {
+      byPosition.set(position, row);
+    }
+  });
+
+  const rows = [];
+  for (let pos = 1; pos <= 20; pos += 2) {
+    const left = byPosition.get(pos);
+    const right = byPosition.get(pos + 1);
+
+    const leftName = left ? `${left.Driver.givenName} ${left.Driver.familyName}` : "TBD";
+    const rightName = right ? `${right.Driver.givenName} ${right.Driver.familyName}` : "TBD";
+    const leftCode = left?.Driver?.code || left?.Driver?.familyName?.slice(0, 3)?.toUpperCase() || "---";
+    const rightCode = right?.Driver?.code || right?.Driver?.familyName?.slice(0, 3)?.toUpperCase() || "---";
+
+    rows.push(`
+      <div class="grid-row">
+        <button class="grid-slot" data-open-map="true" aria-label="Open circuit map from grid row ${pos}">
+          <span class="grid-pos">P${pos}</span>
+          <span class="grid-code">${escapeHtml(leftCode)}</span>
+          <span class="grid-name">${escapeHtml(leftName)}</span>
+        </button>
+        <button class="grid-slot" data-open-map="true" aria-label="Open circuit map from grid row ${pos + 1}">
+          <span class="grid-pos">P${pos + 1}</span>
+          <span class="grid-code">${escapeHtml(rightCode)}</span>
+          <span class="grid-name">${escapeHtml(rightName)}</span>
+        </button>
+      </div>
+    `);
+  }
+
+  return `<div class="starting-grid">${rows.join("")}</div>`;
+}
+
 function destroyRaceMap() {
   if (state.f1.map) {
     state.f1.map.remove();
@@ -421,8 +464,8 @@ function destroyRaceMap() {
   }
 }
 
-function renderCircuitRealMap(lat, lon, circuitName) {
-  const mapHost = qs("#trackMapContainer");
+function renderCircuitRealMap(lat, lon, circuitName, hostSelector = "#raceMapModal") {
+  const mapHost = qs(hostSelector);
   if (!mapHost) {
     return;
   }
@@ -448,6 +491,48 @@ function renderCircuitRealMap(lat, lon, circuitName) {
   }).addTo(state.f1.map);
 
   L.marker([latNum, lonNum]).addTo(state.f1.map).bindPopup(escapeHtml(circuitName || "Circuit")).openPopup();
+}
+
+function setupGridMapLauncher(lat, lon, circuitName) {
+  const gridContainer = qs("#latestGridLayout");
+  const modal = qs("#circuitMapModal");
+  const closeBtn = qs("#closeCircuitMapModal");
+  const openHint = qs("#gridLaunchHint");
+
+  if (!gridContainer || !modal || !closeBtn) {
+    return;
+  }
+
+  const canOpenMap = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon));
+  if (openHint) {
+    openHint.textContent = canOpenMap
+      ? "Latest starting grid. Click any slot to open circuit location map."
+      : "Grid is available. Map location is unavailable for this race.";
+  }
+
+  const openModal = () => {
+    if (!canOpenMap) {
+      return;
+    }
+    modal.classList.remove("hidden");
+    renderCircuitRealMap(lat, lon, circuitName, "#raceMapModal");
+  };
+
+  gridContainer.querySelectorAll("[data-open-map='true']").forEach((slot) => {
+    slot.addEventListener("click", openModal);
+  });
+
+  closeBtn.addEventListener("click", () => {
+    modal.classList.add("hidden");
+    destroyRaceMap();
+  });
+
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      modal.classList.add("hidden");
+      destroyRaceMap();
+    }
+  });
 }
 
 function formatRaceDateTime(date, time) {
@@ -663,7 +748,8 @@ function renderF1Skeleton() {
       <p><strong>Time (UTC):</strong> <span id="raceTime">Loading...</span></p>
       <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
       <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
-      <div id="trackMapContainer"></div>
+      <p class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</p>
+      <div id="latestGridLayout"></div>
     </article>
 
     <article class="glass-card card-span-4 card-entry">
@@ -703,6 +789,16 @@ function renderF1Skeleton() {
       <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
       <div id="comparisonResult" style="margin-top:0.75rem;"></div>
     </article>
+
+    <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
+      <div class="map-modal-card glass-card">
+        <div class="map-modal-head">
+          <h3 class="card-title" style="margin:0;">Circuit Location Map</h3>
+          <button id="closeCircuitMapModal" class="small-btn">Close</button>
+        </div>
+        <div id="raceMapModal"></div>
+      </div>
+    </div>
   `;
 }
 
@@ -767,7 +863,9 @@ async function renderF1() {
     qs("#weatherValue").textContent = await fetchTrackWeather(lat, lon);
 
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
-    renderCircuitRealMap(lat, lon, circuitName);
+
+    qs("#latestGridLayout").innerHTML = renderStartingGridLayout(lastQualifying, lastRaceResults);
+    setupGridMapLauncher(lat, lon, circuitName);
 
     qs("#driverStandings").innerHTML = renderStandingsList(drivers);
     setupDriverListEvents();
