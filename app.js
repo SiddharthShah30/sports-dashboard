@@ -438,14 +438,21 @@ function renderStartingGridLayout(qualifyingRows, resultRows) {
     const leftCode = left?.Driver?.code || left?.Driver?.familyName?.slice(0, 3)?.toUpperCase() || "---";
     const rightCode = right?.Driver?.code || right?.Driver?.familyName?.slice(0, 3)?.toUpperCase() || "---";
 
+    const leftMedia = state.f1.driverMediaMap[(leftCode || "").toUpperCase()] || {};
+    const rightMedia = state.f1.driverMediaMap[(rightCode || "").toUpperCase()] || {};
+    const leftColor = leftMedia.teamColor || "#6a748b";
+    const rightColor = rightMedia.teamColor || "#6a748b";
+
+    const laneIndex = (pos - 1) / 2 + 1;
+
     rows.push(`
-      <div class="grid-row">
-        <button class="grid-slot" data-open-map="true" aria-label="Open circuit map from grid row ${pos}">
+      <div class="grid-row ${laneIndex % 2 === 0 ? "lane-even" : "lane-odd"}">
+        <button class="grid-slot lane-left" style="--team-color:${escapeHtml(leftColor)}" data-open-map="true" aria-label="Open circuit map from grid row ${pos}">
           <span class="grid-pos">P${pos}</span>
           <span class="grid-code">${escapeHtml(leftCode)}</span>
           <span class="grid-name">${escapeHtml(leftName)}</span>
         </button>
-        <button class="grid-slot" data-open-map="true" aria-label="Open circuit map from grid row ${pos + 1}">
+        <button class="grid-slot lane-right" style="--team-color:${escapeHtml(rightColor)}" data-open-map="true" aria-label="Open circuit map from grid row ${pos + 1}">
           <span class="grid-pos">P${pos + 1}</span>
           <span class="grid-code">${escapeHtml(rightCode)}</span>
           <span class="grid-name">${escapeHtml(rightName)}</span>
@@ -748,8 +755,16 @@ function renderF1Skeleton() {
       <p><strong>Time (UTC):</strong> <span id="raceTime">Loading...</span></p>
       <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
       <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
-      <p class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</p>
-      <div id="latestGridLayout"></div>
+      <div class="race-center-stack">
+        <div>
+          <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
+          <div id="raceTrackLayout"></div>
+        </div>
+        <div>
+          <p class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</p>
+          <div id="latestGridLayout"></div>
+        </div>
+      </div>
     </article>
 
     <article class="glass-card card-span-4 card-entry">
@@ -863,6 +878,9 @@ async function renderF1() {
     qs("#weatherValue").textContent = await fetchTrackWeather(lat, lon);
 
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
+    const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
+
+    qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
 
     qs("#latestGridLayout").innerHTML = renderStartingGridLayout(lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);

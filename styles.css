@@ -403,10 +403,43 @@ body {
   margin-top: 0.55rem;
 }
 
+.race-center-stack {
+  display: grid;
+  gap: 0.72rem;
+}
+
 .grid-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
+  position: relative;
+}
+
+.grid-row::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lane-odd .lane-left {
+  margin-right: 0.7rem;
+}
+
+.lane-odd .lane-right {
+  margin-left: 0.12rem;
+}
+
+.lane-even .lane-left {
+  margin-right: 0.12rem;
+}
+
+.lane-even .lane-right {
+  margin-left: 0.7rem;
 }
 
 .grid-slot {
@@ -422,6 +455,18 @@ body {
   align-items: center;
   text-align: left;
   transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.grid-slot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--team-color, #6a748b);
 }
 
 .grid-slot:hover {
@@ -448,6 +493,10 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#raceTrackLayout .track-map {
+  margin-top: 0.2rem;
 }
 
 .map-modal {
@@ -685,6 +734,18 @@ body[data-module="nba"] .hero {
 
   .grid-row {
     grid-template-columns: 1fr;
+  }
+
+  .grid-row::before {
+    display: none;
+  }
+
+  .lane-odd .lane-left,
+  .lane-odd .lane-right,
+  .lane-even .lane-left,
+  .lane-even .lane-right {
+    margin-left: 0;
+    margin-right: 0;
   }
 }
 
