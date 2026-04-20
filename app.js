@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   module: "paddock:module",
-  favoriteDriver: "paddock:favoriteDriver"
+  favoriteDriver: "paddock:favoriteDriver",
+  favoriteTeam: "paddock:favoriteTeam"
 };
 
 const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
@@ -20,6 +21,7 @@ const TEAM_LOGO_ASSETS = {
 const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
+  favoriteTeam: localStorage.getItem(STORAGE_KEYS.favoriteTeam) || "",
   f1: {
     drivers: [],
     constructors: [],
@@ -33,6 +35,21 @@ const state = {
     countdownTicker: null,
     chart: null
   }
+};
+
+const TEAM_ACCENTS = {
+  Ferrari: "#ed1131",
+  Mercedes: "#00d2be",
+  McLaren: "#ff8000",
+  "Red Bull Racing": "#3671c6",
+  "Aston Martin": "#229971",
+  Alpine: "#00a1e8",
+  Williams: "#1868db",
+  Audi: "#f50537",
+  Cadillac: "#909090",
+  "Racing Bulls": "#6c98ff",
+  "Haas F1 Team": "#9c9fa2",
+  Sauber: "#52e252"
 };
 
 const SPORT_META = {
@@ -198,7 +215,19 @@ function setHeaderMeta() {
   const meta = SPORT_META[state.activeModule];
   qs("#moduleTag").textContent = meta.tag;
   qs("#moduleHeadline").textContent = meta.headline;
-  qs("#favoriteLabel").textContent = `Favorite Driver: ${state.favoriteDriver || "None"}`;
+  const favoriteDriverEntry = state.f1.drivers.find((entry) => entry.Driver.driverId === state.favoriteDriver);
+  const favoriteDriverLabel = favoriteDriverEntry
+    ? `${favoriteDriverEntry.Driver.givenName} ${favoriteDriverEntry.Driver.familyName}`
+    : (state.favoriteDriver ? state.favoriteDriver.toUpperCase() : "");
+  const favoriteBits = [];
+  if (state.favoriteTeam) {
+    favoriteBits.push(`Team: ${state.favoriteTeam}`);
+  }
+  if (favoriteDriverLabel) {
+    favoriteBits.push(`Driver: ${favoriteDriverLabel}`);
+  }
+  qs("#favoriteLabel").textContent = favoriteBits.length ? favoriteBits.join(" | ") : "No favorites selected";
+  applyTeamAccentTheme(state.favoriteTeam);
   document.body.setAttribute("data-module", state.activeModule);
 }
 
@@ -229,6 +258,60 @@ function formatCountdown(targetIso) {
   const seconds = Math.floor((diff % minuteMs) / secondMs);
 
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+function getCountdownParts(targetIso) {
+  const now = Date.now();
+  const target = new Date(targetIso).getTime();
+  const diff = Math.max(0, target - now);
+
+  const dayMs = 1000 * 60 * 60 * 24;
+  const hourMs = 1000 * 60 * 60;
+  const minuteMs = 1000 * 60;
+
+  const days = Math.floor(diff / dayMs);
+  const hours = Math.floor((diff % dayMs) / hourMs);
+  const minutes = Math.floor((diff % hourMs) / minuteMs);
+  const seconds = Math.floor((diff % minuteMs) / 1000);
+
+  return {
+    days: String(days).padStart(2, "0"),
+    hours: String(hours).padStart(2, "0"),
+    minutes: String(minutes).padStart(2, "0"),
+    seconds: String(seconds).padStart(2, "0")
+  };
+}
+
+function getRacePhase(nextRace) {
+  const start = new Date(`${nextRace?.date || ""}T${nextRace?.time || "00:00:00Z"}`).getTime();
+  const end = start + 1000 * 60 * 60 * 2;
+  const now = Date.now();
+  if (!Number.isFinite(start)) {
+    return { label: "SCHEDULE", detail: "Waiting for official race time" };
+  }
+  if (now < start) {
+    return { label: "PRE-RACE", detail: "Countdown active" };
+  }
+  if (now >= start && now <= end) {
+    const elapsedMin = Math.max(0, Math.floor((now - start) / 60000));
+    return { label: "LIVE", detail: `Race in progress • T+${elapsedMin} min` };
+  }
+  return { label: "FINISHED", detail: "Awaiting post-race updates" };
+}
+
+function applyTeamAccentTheme(teamName) {
+  const accent = TEAM_ACCENTS[teamName] || "#ff1f3d";
+  const normalized = accent.replace("#", "");
+  const full = normalized.length === 3
+    ? normalized.split("").map((char) => `${char}${char}`).join("")
+    : normalized;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  document.documentElement.style.setProperty("--accent", accent);
+  if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+    document.documentElement.style.setProperty("--accent-rgb", `${r}, ${g}, ${b}`);
+  }
 }
 
 function getAvatarUrl(headshot, displayName) {
@@ -617,12 +700,58 @@ function setupCountdown(raceDateIso) {
     return;
   }
 
+  const raceStart = new Date(raceDateIso).getTime();
+  const raceEnd = raceStart + 1000 * 60 * 60 * 2;
+
   const update = () => {
     const countdownText = formatCountdown(raceDateIso);
+    const parts = getCountdownParts(raceDateIso);
     countdownEl.textContent = countdownText;
     const quickCountdown = qs("#quickCountdown");
     if (quickCountdown) {
       quickCountdown.textContent = countdownText;
+    }
+    const dayCell = qs("#timerDays");
+    const hourCell = qs("#timerHours");
+    const minuteCell = qs("#timerMinutes");
+    const secondCell = qs("#timerSeconds");
+    if (dayCell) {
+      dayCell.textContent = parts.days;
+    }
+    if (hourCell) {
+      hourCell.textContent = parts.hours;
+    }
+    if (minuteCell) {
+      minuteCell.textContent = parts.minutes;
+    }
+    if (secondCell) {
+      secondCell.textContent = parts.seconds;
+    }
+
+    const pulse = qs("#livePulse");
+    if (pulse) {
+      const stamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+      pulse.textContent = `Auto-refresh pulse • ${stamp} UTC`;
+    }
+
+    const badge = qs("#raceStateBadge");
+    const detail = qs("#raceStateDetail");
+    const now = Date.now();
+    if (badge && detail && Number.isFinite(raceStart)) {
+      if (now < raceStart) {
+        badge.textContent = "PRE-RACE";
+        badge.className = "race-state-badge pre-race";
+        detail.textContent = "Countdown active";
+      } else if (now >= raceStart && now <= raceEnd) {
+        const elapsedMin = Math.max(0, Math.floor((now - raceStart) / 60000));
+        badge.textContent = "LIVE";
+        badge.className = "race-state-badge live";
+        detail.textContent = `Race in progress • T+${elapsedMin} min`;
+      } else {
+        badge.textContent = "FINISHED";
+        badge.className = "race-state-badge finished";
+        detail.textContent = "Awaiting post-race updates";
+      }
     }
   };
 
@@ -679,6 +808,136 @@ function setupHeadToHeadEvents() {
   });
 }
 
+function setupPreferenceControls(drivers, constructors) {
+  const teamSelect = qs("#favoriteTeamSelect");
+  const driverSelect = qs("#favoriteDriverSelect");
+  if (!teamSelect || !driverSelect) {
+    return;
+  }
+
+  const teamOptions = constructors
+    .map((entry) => `<option value="${escapeHtml(entry.Constructor.name)}">${escapeHtml(entry.Constructor.name)}</option>`)
+    .join("");
+  teamSelect.innerHTML = `<option value="">Select team</option>${teamOptions}`;
+  teamSelect.value = state.favoriteTeam || "";
+
+  const driverOptions = drivers
+    .map((entry) => {
+      const id = entry.Driver.driverId;
+      const name = `${entry.Driver.givenName} ${entry.Driver.familyName}`;
+      return `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`;
+    })
+    .join("");
+  driverSelect.innerHTML = `<option value="">Select driver</option>${driverOptions}`;
+  driverSelect.value = state.favoriteDriver || "";
+
+  teamSelect.onchange = () => {
+    state.favoriteTeam = teamSelect.value;
+    localStorage.setItem(STORAGE_KEYS.favoriteTeam, state.favoriteTeam);
+    setHeaderMeta();
+  };
+
+  driverSelect.onchange = async () => {
+    state.favoriteDriver = driverSelect.value;
+    state.f1.selectedDriverId = driverSelect.value;
+    localStorage.setItem(STORAGE_KEYS.favoriteDriver, state.favoriteDriver);
+    setHeaderMeta();
+    if (state.activeModule === "f1") {
+      await renderF1();
+    }
+  };
+}
+
+async function fetchSeasonSummary(roundsCompleted) {
+  const currentSchedule = await fetchErgast("/current.json?limit=100");
+  const races = currentSchedule?.MRData?.RaceTable?.Races || [];
+  const totalRounds = races.length;
+  const completed = roundsCompleted;
+  return {
+    totalRounds,
+    completed,
+    remaining: Math.max(0, totalRounds - completed)
+  };
+}
+
+async function fetchKnowledgeSummary(topic) {
+  const safeTopic = encodeURIComponent(topic || "Formula One");
+  const summary = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${safeTopic}`);
+  return {
+    title: summary?.title || topic,
+    extract: summary?.extract || "No summary available for this query.",
+    url: summary?.content_urls?.desktop?.page || ""
+  };
+}
+
+async function fetchLatestNews() {
+  try {
+    const payload = await fetchJSON("https://www.reddit.com/r/formula1/new.json?limit=6");
+    const posts = payload?.data?.children?.map((entry) => entry?.data).filter(Boolean) || [];
+    return posts.slice(0, 6).map((post) => ({
+      title: post.title,
+      url: `https://www.reddit.com${post.permalink}`,
+      source: "r/formula1"
+    }));
+  } catch (error) {
+    return [];
+  }
+}
+
+function renderNewsList(newsItems) {
+  const container = qs("#newsList");
+  if (!container) {
+    return;
+  }
+  if (!newsItems.length) {
+    container.innerHTML = "<p class='empty-state'>News feed unavailable right now.</p>";
+    return;
+  }
+  container.innerHTML = newsItems
+    .map(
+      (item) => `
+      <a class="news-item" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.source)}</span>
+      </a>
+    `
+    )
+    .join("");
+}
+
+function setupKnowledgeHub() {
+  const input = qs("#knowledgeInput");
+  const button = qs("#knowledgeSearchBtn");
+  const output = qs("#knowledgeOutput");
+  const pills = qsa("#knowledgePills [data-topic]");
+  if (!input || !button || !output) {
+    return;
+  }
+
+  const runSearch = async () => {
+    const query = input.value.trim() || "Formula One";
+    output.innerHTML = "<p class='empty-state'>Searching knowledge base...</p>";
+    try {
+      const result = await fetchKnowledgeSummary(query);
+      output.innerHTML = `
+        <h4>${escapeHtml(result.title)}</h4>
+        <p>${escapeHtml(result.extract)}</p>
+        ${result.url ? `<a href="${escapeHtml(result.url)}" target="_blank" rel="noreferrer noopener">Read more</a>` : ""}
+      `;
+    } catch (error) {
+      output.innerHTML = "<p class='empty-state'>No knowledge result for this search.</p>";
+    }
+  };
+
+  button.onclick = runSearch;
+  pills.forEach((pill) => {
+    pill.onclick = async () => {
+      input.value = pill.dataset.topic || "Formula One";
+      await runSearch();
+    };
+  });
+}
+
 function setupResetButton() {
   const resetBtn = qs("#resetPrefsBtn");
   if (!resetBtn) {
@@ -686,8 +945,18 @@ function setupResetButton() {
   }
   resetBtn.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEYS.favoriteDriver);
+    localStorage.removeItem(STORAGE_KEYS.favoriteTeam);
     state.favoriteDriver = "";
+    state.favoriteTeam = "";
     state.f1.selectedDriverId = "";
+    const teamSelect = qs("#favoriteTeamSelect");
+    const driverSelect = qs("#favoriteDriverSelect");
+    if (teamSelect) {
+      teamSelect.value = "";
+    }
+    if (driverSelect) {
+      driverSelect.value = "";
+    }
     setHeaderMeta();
     if (state.activeModule === "f1") {
       renderF1();
@@ -748,13 +1017,18 @@ function upsertTrajectoryChart(labels, values) {
 function renderF1Skeleton() {
   const grid = qs("#dashboardGrid");
   grid.innerHTML = `
-    <article class="glass-card card-span-4 card-entry">
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+      <div class="live-state-wrap">
+        <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
+        <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
+      </div>
       <p><strong>Day:</strong> <span id="raceDay">Loading...</span></p>
       <p><strong>Date:</strong> <span id="raceDate">Loading...</span></p>
       <p><strong>Time (UTC):</strong> <span id="raceTime">Loading...</span></p>
       <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
       <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
+      <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
       <div class="race-center-stack">
         <div>
           <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
@@ -767,12 +1041,12 @@ function renderF1Skeleton() {
       </div>
     </article>
 
-    <article class="glass-card card-span-4 card-entry">
+    <article class="glass-card card-span-3 card-entry">
       <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
       <div id="driverStandings" class="data-list"></div>
     </article>
 
-    <article class="glass-card card-span-4 card-entry">
+    <article class="glass-card card-span-3 card-entry">
       <h3 class="card-title">Driver Profile Card</h3>
       <div id="profileStats" class="stats-row"></div>
       <div style="height: 190px; margin-top: 0.8rem;">
@@ -795,7 +1069,7 @@ function renderF1Skeleton() {
       <div id="lastQualifyingStandings"></div>
     </article>
 
-    <article class="glass-card card-span-12 card-entry">
+    <article class="glass-card card-span-8 card-entry">
       <h3 class="card-title">Head-to-Head Tool</h3>
       <div class="split" style="margin-bottom:0.75rem;">
         <select id="driverA" class="select-input"></select>
@@ -803,6 +1077,37 @@ function renderF1Skeleton() {
       </div>
       <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
       <div id="comparisonResult" style="margin-top:0.75rem;"></div>
+    </article>
+
+    <article class="glass-card card-span-4 card-entry">
+      <h3 class="card-title">Season Intelligence</h3>
+      <div id="seasonSnapshot" class="mini-table">
+        <p class="empty-state">Loading season snapshot...</p>
+      </div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry">
+      <h3 class="card-title">Knowledge Hub</h3>
+      <div class="split" style="margin-bottom:0.6rem;">
+        <input id="knowledgeInput" class="select-input" placeholder="Search teams, drivers, principals, legends" />
+        <button id="knowledgeSearchBtn" class="small-btn">Search Wiki</button>
+      </div>
+      <div class="topic-pills" id="knowledgePills">
+        <button class="small-btn" data-topic="Scuderia Ferrari">Ferrari</button>
+        <button class="small-btn" data-topic="Toto Wolff">Team Principal</button>
+        <button class="small-btn" data-topic="Ayrton Senna">Legend</button>
+        <button class="small-btn" data-topic="Formula One World Drivers' Championship">Championship History</button>
+      </div>
+      <div id="knowledgeOutput" class="knowledge-output">
+        <p class="empty-state">Search any F1 topic to read current and historical context.</p>
+      </div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry">
+      <h3 class="card-title">Latest News</h3>
+      <div id="newsList" class="news-list">
+        <p class="empty-state">Loading latest updates...</p>
+      </div>
     </article>
 
     <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
@@ -845,6 +1150,8 @@ async function renderF1() {
     state.f1.driverMediaMap = driverMediaMap;
     state.f1.teamLogoMap = teamLogoMap;
 
+    setupPreferenceControls(drivers, constructors);
+
     if (!state.f1.selectedDriverId) {
       state.f1.selectedDriverId = state.favoriteDriver || drivers[0]?.Driver?.driverId || "";
     }
@@ -857,6 +1164,17 @@ async function renderF1() {
     qs("#raceDay").textContent = raceDateParts.weekday;
     qs("#raceDate").textContent = raceDateParts.dateLabel;
     qs("#raceTime").textContent = raceDateParts.timeLabel;
+
+    const racePhase = getRacePhase(nextRace);
+    const raceStateBadge = qs("#raceStateBadge");
+    const raceStateDetail = qs("#raceStateDetail");
+    if (raceStateBadge) {
+      raceStateBadge.textContent = racePhase.label;
+      raceStateBadge.className = `race-state-badge ${racePhase.label.toLowerCase().replace(/\s+/g, "-")}`;
+    }
+    if (raceStateDetail) {
+      raceStateDetail.textContent = racePhase.detail;
+    }
 
     const leader = drivers[0];
     const second = drivers[1];
@@ -909,6 +1227,13 @@ async function renderF1() {
     setupHeadToHeadEvents();
 
     const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
+    if (!state.favoriteTeam) {
+      state.favoriteTeam = selectedDriver?.Constructors?.[0]?.name || "";
+      localStorage.setItem(STORAGE_KEYS.favoriteTeam, state.favoriteTeam);
+    }
+    applyTeamAccentTheme(state.favoriteTeam);
+    setHeaderMeta();
+
     const profileNode = qs("#profileStats");
     profileNode.innerHTML = "";
     const selectedCode = (selectedDriver?.Driver?.code || selectedDriver?.Driver?.familyName?.slice(0, 3) || "").toUpperCase();
@@ -957,6 +1282,22 @@ async function renderF1() {
 
     const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
+
+    const seasonSummary = await fetchSeasonSummary(trajectory.labels.length);
+    const seasonSnapshotNode = qs("#seasonSnapshot");
+    if (seasonSnapshotNode) {
+      const leaderTeam = selectedDriver?.Constructors?.[0]?.name || "Unknown";
+      seasonSnapshotNode.innerHTML = `
+        <div class="mini-row"><span>Rounds</span><span>${seasonSummary.completed} / ${seasonSummary.totalRounds}</span><span>Done</span></div>
+        <div class="mini-row"><span>Remaining</span><span>${seasonSummary.remaining}</span><span>To race</span></div>
+        <div class="mini-row"><span>Leader</span><span>${leaderName}</span><span>${leader?.points || 0} pts</span></div>
+        <div class="mini-row"><span>Leader Team</span><span>${leaderTeam}</span><span>Current form</span></div>
+      `;
+    }
+
+    setupKnowledgeHub();
+    const newsItems = await fetchLatestNews();
+    renderNewsList(newsItems);
   } catch (error) {
     renderQuickIntelStrip({
       countdown: "Unavailable",

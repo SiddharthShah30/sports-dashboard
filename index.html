@@ -46,7 +46,19 @@
         <h2 id="moduleHeadline">Live telemetry-inspired race intelligence</h2>
       </div>
       <div class="hero-right">
-        <span id="favoriteLabel">Favorite Driver: None</span>
+        <div class="pref-group">
+          <label for="favoriteTeamSelect">Favorite Team</label>
+          <select id="favoriteTeamSelect" class="select-input pref-select">
+            <option value="">Select team</option>
+          </select>
+        </div>
+        <div class="pref-group">
+          <label for="favoriteDriverSelect">Favorite Driver</label>
+          <select id="favoriteDriverSelect" class="select-input pref-select">
+            <option value="">Select driver</option>
+          </select>
+        </div>
+        <span id="favoriteLabel">No favorites selected</span>
         <button id="resetPrefsBtn" class="ghost-btn">Reset Preferences</button>
       </div>
     </section>
@@ -54,6 +66,15 @@
     <section class="quick-intel-row" id="quickIntelRow">
       <article class="glass-card quick-card card-entry">
         <p class="quick-label">Next Race Countdown</p>
+        <div class="startup-timer" id="startupTimer">
+          <div class="timer-cell"><span id="timerDays">00</span><small>D</small></div>
+          <div class="timer-sep">:</div>
+          <div class="timer-cell"><span id="timerHours">00</span><small>H</small></div>
+          <div class="timer-sep">:</div>
+          <div class="timer-cell"><span id="timerMinutes">00</span><small>M</small></div>
+          <div class="timer-sep">:</div>
+          <div class="timer-cell"><span id="timerSeconds">00</span><small>S</small></div>
+        </div>
         <p class="quick-value" id="quickCountdown">Loading...</p>
         <p class="quick-sub" id="quickRaceName">Fetching next Grand Prix</p>
       </article>
