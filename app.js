@@ -13,8 +13,11 @@ const state = {
     constructors: [],
     lastRaceResults: [],
     lastQualifying: [],
+    driverMediaMap: {},
+    teamLogoMap: {},
     selectedDriverId: "",
     nextRace: null,
+    map: null,
     countdownTicker: null,
     chart: null
   }
@@ -93,6 +96,20 @@ function toNum(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function initialsFromName(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase() || "").join("") || "DR";
+}
+
 async function fetchJSON(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8500);
@@ -118,6 +135,53 @@ async function fetchErgast(path) {
     }
   }
   throw lastError || new Error("Unable to load Ergast data");
+}
+
+async function fetchOpenF1DriverMedia() {
+  try {
+    const drivers = await fetchJSON("https://api.openf1.org/v1/drivers?session_key=latest");
+    const map = {};
+    drivers.forEach((driver) => {
+      const key = (driver.name_acronym || "").toUpperCase();
+      if (!key) {
+        return;
+      }
+      map[key] = {
+        headshotUrl: driver.headshot_url || "",
+        teamName: driver.team_name || "",
+        teamColor: driver.team_colour ? `#${driver.team_colour}` : ""
+      };
+    });
+    return map;
+  } catch (error) {
+    return {};
+  }
+}
+
+async function fetchTeamLogoMap(constructors) {
+  const entries = await Promise.all(
+    constructors.map(async (entry) => {
+      const teamName = entry?.Constructor?.name;
+      const teamWiki = entry?.Constructor?.url;
+      if (!teamName || !teamWiki) {
+        return [teamName, ""];
+      }
+
+      try {
+        const title = decodeURIComponent(teamWiki.split("/").pop() || "");
+        if (!title) {
+          return [teamName, ""];
+        }
+        const summary = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`);
+        const thumb = summary?.thumbnail?.source || summary?.originalimage?.source || "";
+        return [teamName, thumb];
+      } catch (error) {
+        return [teamName, ""];
+      }
+    })
+  );
+
+  return Object.fromEntries(entries.filter(([key]) => Boolean(key)));
 }
 
 function setActiveTab() {
@@ -151,6 +215,7 @@ function clearF1Intervals() {
     clearInterval(state.f1.countdownTicker);
     state.f1.countdownTicker = null;
   }
+  destroyRaceMap();
 }
 
 function formatCountdown(targetIso) {
@@ -290,11 +355,19 @@ function renderStandingsList(drivers) {
       const team = driver.Constructors?.[0]?.name || "Unknown Team";
       const points = driver.points;
       const isActive = state.f1.selectedDriverId === id;
+      const media = state.f1.driverMediaMap[(code || "").toUpperCase()] || {};
+      const headshot = media.headshotUrl || "";
+      const driverName = `${driver.Driver.givenName} ${driver.Driver.familyName}`;
 
       return `
         <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
-          <strong>#${driver.position} ${driver.Driver.givenName} ${driver.Driver.familyName} (${code})</strong>
-          <span>${team} | ${points} pts</span>
+          <div class="driver-item-main">
+            <img class="driver-avatar" src="${escapeHtml(headshot)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.style.display='none'" />
+            <div class="driver-copy">
+              <strong>#${driver.position} ${driverName} (${code})</strong>
+              <span>${team} | ${points} pts</span>
+            </div>
+          </div>
         </button>
       `;
     })
@@ -309,11 +382,13 @@ function renderConstructorBars(constructors) {
     .map((entry, index) => {
       const pct = Math.max(8, (toNum(entry.points) / leaderPoints) * 100);
       const color = safeTeamColor(index);
+      const teamName = entry.Constructor.name;
+      const logo = state.f1.teamLogoMap[teamName] || "";
 
       return `
         <div class="card-entry" style="margin-bottom:0.65rem;">
           <div class="label-row">
-            <span>${entry.Constructor.name}</span>
+            <span>${logo ? `<img class="team-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(teamName)}" loading="lazy" onerror="this.style.display='none'" />` : ""}${teamName}</span>
             <span>${entry.points} pts</span>
           </div>
           <div class="progress-wrap">
@@ -334,6 +409,42 @@ function renderTrackMap(circuitId) {
       </svg>
     </div>
   `;
+}
+
+function destroyRaceMap() {
+  if (state.f1.map) {
+    state.f1.map.remove();
+    state.f1.map = null;
+  }
+}
+
+function renderCircuitRealMap(lat, lon, circuitName) {
+  const mapHost = qs("#trackMapContainer");
+  if (!mapHost) {
+    return;
+  }
+
+  const latNum = Number(lat);
+  const lonNum = Number(lon);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum) || typeof L === "undefined") {
+    mapHost.innerHTML = renderTrackMap("silverstone");
+    return;
+  }
+
+  mapHost.innerHTML = "<div class='track-map real-map card-entry'><div id='raceMap'></div></div>";
+  destroyRaceMap();
+
+  state.f1.map = L.map("raceMap", {
+    zoomControl: true,
+    attributionControl: true
+  }).setView([latNum, lonNum], 12);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(state.f1.map);
+
+  L.marker([latNum, lonNum]).addTo(state.f1.map).bindPopup(escapeHtml(circuitName || "Circuit")).openPopup();
 }
 
 function formatRaceDateTime(date, time) {
@@ -590,6 +701,7 @@ function renderF1Skeleton() {
 
 async function renderF1() {
   renderF1Skeleton();
+  clearF1Intervals();
 
   try {
     const { drivers, constructors, nextRace, lastRaceResults, lastQualifying } = await fetchF1CoreData();
@@ -598,6 +710,13 @@ async function renderF1() {
     state.f1.nextRace = nextRace;
     state.f1.lastRaceResults = lastRaceResults;
     state.f1.lastQualifying = lastQualifying;
+
+    const [driverMediaMap, teamLogoMap] = await Promise.all([
+      fetchOpenF1DriverMedia(),
+      fetchTeamLogoMap(constructors)
+    ]);
+    state.f1.driverMediaMap = driverMediaMap;
+    state.f1.teamLogoMap = teamLogoMap;
 
     if (!state.f1.selectedDriverId) {
       state.f1.selectedDriverId = state.favoriteDriver || drivers[0]?.Driver?.driverId || "";
@@ -618,8 +737,8 @@ async function renderF1() {
     const lon = nextRace?.Circuit?.Location?.long;
     qs("#weatherValue").textContent = await fetchTrackWeather(lat, lon);
 
-    const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
-    qs("#trackMapContainer").innerHTML = renderTrackMap(circuitId);
+    const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
+    renderCircuitRealMap(lat, lon, circuitName);
 
     qs("#driverStandings").innerHTML = renderStandingsList(drivers);
     setupDriverListEvents();
@@ -647,6 +766,25 @@ async function renderF1() {
     const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
     const profileNode = qs("#profileStats");
     profileNode.innerHTML = "";
+    const selectedCode = (selectedDriver?.Driver?.code || selectedDriver?.Driver?.familyName?.slice(0, 3) || "").toUpperCase();
+    const selectedMedia = state.f1.driverMediaMap[selectedCode] || {};
+    const selectedTeamName = selectedDriver?.Constructors?.[0]?.name || "";
+    const selectedTeamLogo = state.f1.teamLogoMap[selectedTeamName] || "";
+    const selectedDriverName = `${selectedDriver?.Driver?.givenName || ""} ${selectedDriver?.Driver?.familyName || ""}`.trim();
+
+    profileNode.insertAdjacentHTML(
+      "beforebegin",
+      `
+      <div class="profile-hero" id="profileHero">
+        <img src="${escapeHtml(selectedMedia.headshotUrl || "")}" alt="${escapeHtml(selectedDriverName)}" loading="lazy" onerror="this.style.display='none'" />
+        <div>
+          <p class="kicker">Selected Driver</p>
+          <strong>${escapeHtml(selectedDriverName || "Driver")}</strong>
+          <p>${selectedTeamLogo ? `<img class="team-logo" src="${escapeHtml(selectedTeamLogo)}" alt="${escapeHtml(selectedTeamName)}" loading="lazy" onerror="this.style.display='none'" />` : ""}${escapeHtml(selectedTeamName)}</p>
+        </div>
+      </div>
+      `
+    );
 
     profileNode.appendChild(
       createStatCard({

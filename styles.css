@@ -315,6 +315,56 @@ body::before {
   display: block;
 }
 
+.driver-item-main {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.driver-avatar {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--line);
+  object-fit: cover;
+  background: #f0f0f0;
+}
+
+.driver-copy {
+  min-width: 0;
+}
+
+.driver-copy strong,
+.driver-copy span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-logo {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  object-fit: contain;
+  background: #fff;
+  margin-right: 0.45rem;
+  vertical-align: middle;
+}
+
+.profile-hero {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.profile-hero img {
+  width: 76px;
+  height: 76px;
+  border: 2px solid var(--line);
+  object-fit: cover;
+  background: #f0f0f0;
+}
+
 .label-row {
   display: flex;
   justify-content: space-between;
@@ -345,6 +395,17 @@ body::before {
   border: 2px solid var(--line);
   background: #f5f9ff;
   padding: 0.6rem;
+}
+
+.track-map.real-map {
+  padding: 0;
+  height: 220px;
+  overflow: hidden;
+}
+
+.track-map.real-map > div {
+  width: 100%;
+  height: 100%;
 }
 
 .track-map svg {
