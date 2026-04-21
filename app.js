@@ -91,6 +91,58 @@ const TRACK_PATHS = {
   spa: "M30 105 L65 65 L120 35 L180 45 L230 65 L250 95 L205 120 L145 115 L90 125"
 };
 
+const CIRCUIT_TIMEZONES = {
+  albert_park: "Australia/Melbourne",
+  bahrain: "Asia/Bahrain",
+  jeddah: "Asia/Riyadh",
+  imola: "Europe/Rome",
+  miami: "America/New_York",
+  monaco: "Europe/Monaco",
+  catalunya: "Europe/Madrid",
+  gilles_villeneuve: "America/Toronto",
+  red_bull_ring: "Europe/Vienna",
+  silverstone: "Europe/London",
+  hungaroring: "Europe/Budapest",
+  spa: "Europe/Brussels",
+  zandvoort: "Europe/Amsterdam",
+  monza: "Europe/Rome",
+  baku: "Asia/Baku",
+  marina_bay: "Asia/Singapore",
+  suzuka: "Asia/Tokyo",
+  lusail: "Asia/Qatar",
+  americas: "America/Chicago",
+  rodriguez: "America/Mexico_City",
+  interlagos: "America/Sao_Paulo",
+  vegas: "America/Los_Angeles",
+  losail: "Asia/Qatar",
+  yas_marina: "Asia/Dubai",
+  shanghai: "Asia/Shanghai"
+};
+
+const COUNTRY_TIMEZONES = {
+  Australia: "Australia/Melbourne",
+  Bahrain: "Asia/Bahrain",
+  Saudi_Arabia: "Asia/Riyadh",
+  Italy: "Europe/Rome",
+  "United States": "America/New_York",
+  Monaco: "Europe/Monaco",
+  Spain: "Europe/Madrid",
+  Canada: "America/Toronto",
+  Austria: "Europe/Vienna",
+  "United Kingdom": "Europe/London",
+  Hungary: "Europe/Budapest",
+  Belgium: "Europe/Brussels",
+  Netherlands: "Europe/Amsterdam",
+  Azerbaijan: "Asia/Baku",
+  Singapore: "Asia/Singapore",
+  Japan: "Asia/Tokyo",
+  Qatar: "Asia/Qatar",
+  Mexico: "America/Mexico_City",
+  Brazil: "America/Sao_Paulo",
+  UAE: "Asia/Dubai",
+  China: "Asia/Shanghai"
+};
+
 function qs(selector) {
   return document.querySelector(selector);
 }
@@ -113,7 +165,19 @@ function triggerMicroFeedback() {
   }
 }
 
-function formatEventTimeByMode(date, time, mode = state.timeMode) {
+function getTrackTimeZone(race) {
+  const circuitId = race?.Circuit?.circuitId || "";
+  const byCircuit = CIRCUIT_TIMEZONES[circuitId];
+  if (byCircuit) {
+    return byCircuit;
+  }
+
+  const countryRaw = race?.Circuit?.Location?.country || "";
+  const countryKey = countryRaw.replaceAll(" ", "_");
+  return COUNTRY_TIMEZONES[countryKey] || "UTC";
+}
+
+function formatEventTimeByMode(date, time, mode = state.timeMode, trackTimeZone = "UTC") {
   if (!date) {
     return { dateLabel: "TBD", timeLabel: "TBD", zoneLabel: "UTC" };
   }
@@ -124,14 +188,14 @@ function formatEventTimeByMode(date, time, mode = state.timeMode) {
     return { dateLabel: date, timeLabel: time || "TBD", zoneLabel: "UTC" };
   }
 
-  const useUtc = mode === "track";
+  const useTrackZone = mode === "track";
   const userZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
-  const zoneLabel = useUtc ? "UTC (Track)" : userZone;
-  const optionsDate = useUtc
-    ? { year: "numeric", month: "short", day: "2-digit", timeZone: "UTC" }
+  const zoneLabel = useTrackZone ? `${trackTimeZone} (Track)` : userZone;
+  const optionsDate = useTrackZone
+    ? { year: "numeric", month: "short", day: "2-digit", timeZone: trackTimeZone }
     : { year: "numeric", month: "short", day: "2-digit" };
-  const optionsTime = useUtc
-    ? { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" }
+  const optionsTime = useTrackZone
+    ? { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: trackTimeZone }
     : { hour: "2-digit", minute: "2-digit", hour12: false };
 
   return {
@@ -815,7 +879,7 @@ function renderSeasonCalendar(races) {
       const round = toNum(race.round);
       const isCompleted = round <= state.f1.seasonCompletedRound;
       const isActive = round === state.f1.expandedRound;
-      const formatted = formatEventTimeByMode(race.date, race.time);
+      const formatted = formatEventTimeByMode(race.date, race.time, state.timeMode, getTrackTimeZone(race));
       return `
         <button class="season-race-card ${isCompleted ? "completed" : "upcoming"} ${isActive ? "active" : ""}" data-race-round="${round}" type="button">
           <span class="kicker">Round ${round}</span>
@@ -828,7 +892,7 @@ function renderSeasonCalendar(races) {
     .join("");
 
   const selected = races.find((race) => toNum(race.round) === state.f1.expandedRound) || races[0];
-  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time);
+  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time, state.timeMode, getTrackTimeZone(selected));
   detail.innerHTML = `
     <div class="season-weekend">
       <strong>${escapeHtml(selected?.raceName || "Selected Race")}</strong>
@@ -850,7 +914,7 @@ function setupSeasonCalendarEvents(races) {
   });
 }
 
-function renderFooterGrid(drivers, constructors, selectedDriver) {
+function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
   const host = qs("#stickyDataGrid");
   if (!host) {
     return;
@@ -858,6 +922,8 @@ function renderFooterGrid(drivers, constructors, selectedDriver) {
 
   const topDrivers = drivers.slice(0, 5);
   const topTeams = constructors.slice(0, 5);
+  const trackTz = getTrackTimeZone(nextRace);
+
   host.innerHTML = `
     <section class="footer-grid-col">
       <div class="footer-grid-head">
@@ -884,8 +950,8 @@ function renderFooterGrid(drivers, constructors, selectedDriver) {
       <div class="footer-grid-head"><h4>My Paddock</h4></div>
       <div class="footer-row"><span>Favorite Team</span><strong>${escapeHtml(state.favoriteTeam || "Not set")}</strong></div>
       <div class="footer-row"><span>Favorite Driver</span><strong>${escapeHtml(selectedDriver ? `${selectedDriver.Driver.givenName} ${selectedDriver.Driver.familyName}` : "Not set")}</strong></div>
-      <div class="footer-row"><span>Time Mode</span><strong>${state.timeMode === "track" ? "Track Time (UTC)" : "Your Time"}</strong></div>
-      <p class="inline-meta">Sticky quick-access grid for burst sessions.</p>
+      <div class="footer-row"><span>Time Mode</span><strong>${state.timeMode === "track" ? `Track Time (${escapeHtml(trackTz)})` : "Your Time"}</strong></div>
+      <p class="inline-meta">Quick-access grid for burst sessions.</p>
     </section>
   `;
 
@@ -1636,8 +1702,9 @@ async function renderF1() {
     }
 
     const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
+    const trackTimeZone = getTrackTimeZone(nextRace);
     const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
-    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time);
+    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timeMode, trackTimeZone);
     setupTimeModeToggle();
     qs("#raceMeta").textContent = nextRace
       ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
@@ -1795,7 +1862,7 @@ async function renderF1() {
     state.f1.lastNewsItems = newsItems;
     renderBreakingNews(newsItems);
     renderNewsList(newsItems);
-    renderFooterGrid(drivers, constructors, selectedDriver);
+    renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
     renderQuickIntelStrip({
       countdown: "Unavailable",
