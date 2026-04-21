@@ -2,7 +2,7 @@ const STORAGE_KEYS = {
   module: "paddock:module",
   favoriteDriver: "paddock:favoriteDriver",
   favoriteTeam: "paddock:favoriteTeam",
-  timeMode: "paddock:timeMode",
+  timezone: "paddock:timezone",
   fxEnabled: "paddock:fxEnabled"
 };
 
@@ -24,7 +24,7 @@ const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
   favoriteTeam: localStorage.getItem(STORAGE_KEYS.favoriteTeam) || "",
-  timeMode: localStorage.getItem(STORAGE_KEYS.timeMode) || "local",
+  timezone: localStorage.getItem(STORAGE_KEYS.timezone) || "Asia/Kolkata",
   fxEnabled: localStorage.getItem(STORAGE_KEYS.fxEnabled) !== "off",
   f1: {
     drivers: [],
@@ -177,7 +177,17 @@ function getTrackTimeZone(race) {
   return COUNTRY_TIMEZONES[countryKey] || "UTC";
 }
 
-function formatEventTimeByMode(date, time, mode = state.timeMode, trackTimeZone = "UTC") {
+function timezoneLabel(timezone) {
+  if (timezone === "Asia/Kolkata") {
+    return "IST (Mumbai)";
+  }
+  if (timezone === "TRACK_AUTO") {
+    return "Track Local";
+  }
+  return timezone;
+}
+
+function formatEventTimeByMode(date, time, selectedTimezone = state.timezone, trackTimeZone = "UTC") {
   if (!date) {
     return { dateLabel: "TBD", timeLabel: "TBD", zoneLabel: "UTC" };
   }
@@ -188,20 +198,16 @@ function formatEventTimeByMode(date, time, mode = state.timeMode, trackTimeZone 
     return { dateLabel: date, timeLabel: time || "TBD", zoneLabel: "UTC" };
   }
 
-  const useTrackZone = mode === "track";
-  const userZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
-  const zoneLabel = useTrackZone ? `${trackTimeZone} (Track)` : userZone;
-  const optionsDate = useTrackZone
-    ? { year: "numeric", month: "short", day: "2-digit", timeZone: trackTimeZone }
-    : { year: "numeric", month: "short", day: "2-digit" };
-  const optionsTime = useTrackZone
-    ? { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: trackTimeZone }
-    : { hour: "2-digit", minute: "2-digit", hour12: false };
+  const resolvedZone = selectedTimezone === "TRACK_AUTO"
+    ? trackTimeZone
+    : (selectedTimezone || "Asia/Kolkata");
+  const optionsDate = { year: "numeric", month: "short", day: "2-digit", timeZone: resolvedZone };
+  const optionsTime = { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: resolvedZone };
 
   return {
     dateLabel: new Intl.DateTimeFormat("en-US", optionsDate).format(dt),
     timeLabel: new Intl.DateTimeFormat("en-US", optionsTime).format(dt),
-    zoneLabel
+    zoneLabel: selectedTimezone === "TRACK_AUTO" ? `${trackTimeZone} (Track)` : timezoneLabel(resolvedZone)
   };
 }
 
@@ -857,6 +863,31 @@ function renderBreakingNews(newsItems) {
     .join("");
 }
 
+function renderTelemetryFeed(newsItems, nextRace) {
+  const feed = qs("#telemetryFeed");
+  if (!feed) {
+    return;
+  }
+
+  const vegasStatus = `Las Vegas GP Watch: ${nextRace?.raceName?.toLowerCase().includes("vegas") ? "Race weekend active in schedule" : "Monitoring schedule and paddock updates"}`;
+  const nowStamp = new Date().toISOString().replace("T", " ").slice(0, 16);
+
+  const headlineRows = newsItems.slice(0, 3).map((item) => `
+    <div class="telemetry-item">
+      <span>${escapeHtml(item.source)}</span>
+      <strong>${escapeHtml(item.title)}</strong>
+    </div>
+  `).join("");
+
+  feed.innerHTML = `
+    <div class="telemetry-item priority">
+      <span>Telemetry ${nowStamp} UTC</span>
+      <strong>${escapeHtml(vegasStatus)}</strong>
+    </div>
+    ${headlineRows || "<p class='empty-state'>No paddock headlines right now.</p>"}
+  `;
+}
+
 function renderSeasonCalendar(races) {
   const host = qs("#seasonCalendarStrip");
   const detail = qs("#seasonCalendarDetail");
@@ -879,7 +910,7 @@ function renderSeasonCalendar(races) {
       const round = toNum(race.round);
       const isCompleted = round <= state.f1.seasonCompletedRound;
       const isActive = round === state.f1.expandedRound;
-      const formatted = formatEventTimeByMode(race.date, race.time, state.timeMode, getTrackTimeZone(race));
+      const formatted = formatEventTimeByMode(race.date, race.time, state.timezone, getTrackTimeZone(race));
       return `
         <button class="season-race-card ${isCompleted ? "completed" : "upcoming"} ${isActive ? "active" : ""}" data-race-round="${round}" type="button">
           <span class="kicker">Round ${round}</span>
@@ -892,7 +923,7 @@ function renderSeasonCalendar(races) {
     .join("");
 
   const selected = races.find((race) => toNum(race.round) === state.f1.expandedRound) || races[0];
-  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time, state.timeMode, getTrackTimeZone(selected));
+  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time, state.timezone, getTrackTimeZone(selected));
   detail.innerHTML = `
     <div class="season-weekend">
       <strong>${escapeHtml(selected?.raceName || "Selected Race")}</strong>
@@ -950,7 +981,7 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
       <div class="footer-grid-head"><h4>My Paddock</h4></div>
       <div class="footer-row"><span>Favorite Team</span><strong>${escapeHtml(state.favoriteTeam || "Not set")}</strong></div>
       <div class="footer-row"><span>Favorite Driver</span><strong>${escapeHtml(selectedDriver ? `${selectedDriver.Driver.givenName} ${selectedDriver.Driver.familyName}` : "Not set")}</strong></div>
-      <div class="footer-row"><span>Time Mode</span><strong>${state.timeMode === "track" ? `Track Time (${escapeHtml(trackTz)})` : "Your Time"}</strong></div>
+      <div class="footer-row"><span>Timezone</span><strong>${escapeHtml(timezoneLabel(state.timezone === "TRACK_AUTO" ? trackTz : state.timezone))}</strong></div>
       <p class="inline-meta">Quick-access grid for burst sessions.</p>
     </section>
   `;
@@ -967,22 +998,17 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
   }
 }
 
-function setupTimeModeToggle() {
-  const wrap = qs("#timeModeToggle");
-  if (!wrap) {
-    return;
-  }
-
-  qsa("#timeModeToggle [data-time-mode]").forEach((button) => {
-    const active = button.dataset.timeMode === state.timeMode;
-    button.classList.toggle("active", active);
-    button.onclick = () => {
-      state.timeMode = button.dataset.timeMode || "local";
-      localStorage.setItem(STORAGE_KEYS.timeMode, state.timeMode);
+function setupTimezoneAndFxControls() {
+  const timezoneSelect = qs("#timezoneSelect");
+  if (timezoneSelect) {
+    timezoneSelect.value = state.timezone;
+    timezoneSelect.onchange = () => {
+      state.timezone = timezoneSelect.value || "Asia/Kolkata";
+      localStorage.setItem(STORAGE_KEYS.timezone, state.timezone);
       triggerMicroFeedback();
       renderModule();
     };
-  });
+  }
 
   const fxBtn = qs("#fxToggleBtn");
   if (fxBtn) {
@@ -1012,7 +1038,7 @@ function setupUpcomingRaceActions(nextRace) {
       const perm = await Notification.requestPermission();
       if (perm === "granted") {
         new Notification("Paddock Reminder", {
-          body: `${nextRace.raceName} starts soon (${state.timeMode === "track" ? "Track Time" : "Your Time"}).`
+          body: `${nextRace.raceName} starts soon (${timezoneLabel(state.timezone)}).`
         });
         return;
       }
@@ -1524,25 +1550,6 @@ function renderF1Skeleton() {
     </article>
 
     <article class="glass-card card-span-12 card-entry">
-      <h3 class="card-title">Upcoming Race <span class="inline-meta" id="upcomingRaceMeta">Engagement driver</span></h3>
-      <div class="upcoming-race-grid">
-        <div>
-          <p class="inline-meta">Circuit layout</p>
-          <div id="upcomingRaceTrack"></div>
-        </div>
-        <div class="upcoming-race-countdown">
-          <p class="kicker">Countdown to Lights Out</p>
-          <p class="race-countdown-xl" id="upcomingCountdownXL">--</p>
-          <p class="inline-meta" id="upcomingRaceTimeMeta">Syncing race schedule...</p>
-          <div class="upcoming-race-actions">
-            <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
-            <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
-          </div>
-        </div>
-      </div>
-    </article>
-
-    <article class="glass-card card-span-12 card-entry">
       <h3 class="card-title">Season Calendar <span class="inline-meta">Tap race card for weekend schedule</span></h3>
       <div id="seasonCalendarStrip" class="season-calendar-strip">
         <p class="empty-state">Loading season roadmap...</p>
@@ -1562,6 +1569,9 @@ function renderF1Skeleton() {
       <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
       <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
       <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
+      <div id="telemetryFeed" class="telemetry-feed">
+        <p class="empty-state">Loading telemetry feed...</p>
+      </div>
       <div class="race-center-stack">
         <div>
           <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
@@ -1639,7 +1649,7 @@ function renderF1Skeleton() {
     </article>
 
     <article class="glass-card card-span-12 card-entry sticky-data-grid-card">
-      <h3 class="card-title">Data Grid Footer <span class="inline-meta">Fast, sticky access</span></h3>
+      <h3 class="card-title">Data Grid Footer <span class="inline-meta">Standings and My Paddock focus</span></h3>
       <div id="stickyDataGrid" class="sticky-data-grid">
         <p class="empty-state">Loading standings snapshot...</p>
       </div>
@@ -1704,8 +1714,8 @@ async function renderF1() {
     const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
     const trackTimeZone = getTrackTimeZone(nextRace);
     const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
-    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timeMode, trackTimeZone);
-    setupTimeModeToggle();
+    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timezone, trackTimeZone);
+    setupTimezoneAndFxControls();
     qs("#raceMeta").textContent = nextRace
       ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
       : "No race scheduled";
@@ -1754,16 +1764,9 @@ async function renderF1() {
     const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
 
     qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
-    qs("#upcomingRaceTrack").innerHTML = renderTrackMap(circuitId);
-    const upcomingMeta = qs("#upcomingRaceMeta");
-    if (upcomingMeta) {
-      upcomingMeta.textContent = nextRace
-        ? `${nextRace.raceName} • ${nextRace.Circuit.Location.country}`
-        : "Upcoming race unavailable";
-    }
-    const upcomingTimeMeta = qs("#upcomingRaceTimeMeta");
-    if (upcomingTimeMeta) {
-      upcomingTimeMeta.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
+    const quickTrackLayout = qs("#quickTrackLayout");
+    if (quickTrackLayout) {
+      quickTrackLayout.innerHTML = renderTrackMap(circuitId);
     }
     setupUpcomingRaceActions(nextRace);
 
@@ -1861,6 +1864,7 @@ async function renderF1() {
     const newsItems = await fetchLatestNews();
     state.f1.lastNewsItems = newsItems;
     renderBreakingNews(newsItems);
+    renderTelemetryFeed(newsItems, nextRace);
     renderNewsList(newsItems);
     renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
@@ -2009,7 +2013,7 @@ function renderNBA() {
 function renderModule() {
   setActiveTab();
   setHeaderMeta();
-  setupTimeModeToggle();
+  setupTimezoneAndFxControls();
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();

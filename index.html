@@ -31,11 +31,28 @@
       <h1>The Paddock Dashboard</h1>
       <p class="brand-note">Real-time motorsport intelligence, designed like a broadcast product.</p>
     </div>
-    <div class="module-tabs" role="tablist" aria-label="Sports Modules">
-      <button class="tab-btn active" data-module="f1" role="tab" aria-selected="true">Formula 1</button>
-      <button class="tab-btn" data-module="football" role="tab" aria-selected="false">Football</button>
-      <button class="tab-btn" data-module="cricket" role="tab" aria-selected="false">Cricket</button>
-      <button class="tab-btn" data-module="nba" role="tab" aria-selected="false">NBA</button>
+    <div class="header-nav-right">
+      <div class="module-tabs" role="tablist" aria-label="Sports Modules">
+        <button class="tab-btn active" data-module="f1" role="tab" aria-selected="true">Formula 1</button>
+        <button class="tab-btn" data-module="football" role="tab" aria-selected="false">Football</button>
+        <button class="tab-btn" data-module="cricket" role="tab" aria-selected="false">Cricket</button>
+        <button class="tab-btn" data-module="nba" role="tab" aria-selected="false">NBA</button>
+      </div>
+      <div class="header-tools">
+        <input id="globalSearchInput" class="select-input top-search" placeholder="Search drivers, teams, GP history" />
+        <select id="timezoneSelect" class="select-input timezone-select" aria-label="Timezone selector">
+          <option value="Asia/Kolkata" selected>Mumbai (IST)</option>
+          <option value="TRACK_AUTO">Track Local (Auto)</option>
+          <option value="UTC">UTC</option>
+          <option value="Europe/London">London (BST/GMT)</option>
+          <option value="America/New_York">New York (ET)</option>
+          <option value="Asia/Tokyo">Tokyo (JST)</option>
+        </select>
+        <button class="profile-chip" type="button" aria-label="User profile">
+          <span class="profile-dot">SS</span>
+          <span>My Paddock</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -46,17 +63,6 @@
         <h2 id="moduleHeadline">Live telemetry-inspired race intelligence</h2>
       </div>
       <div class="hero-right">
-        <div class="pref-group">
-          <label for="globalSearchInput">Search</label>
-          <input id="globalSearchInput" class="select-input pref-select top-search" placeholder="Search teams, drivers, years" />
-        </div>
-        <div class="pref-group">
-          <label>Time Mode</label>
-          <div class="pill-toggle" id="timeModeToggle" role="group" aria-label="Timezone mode">
-            <button class="small-btn active" data-time-mode="local" type="button">Your Time</button>
-            <button class="small-btn" data-time-mode="track" type="button">Track Time</button>
-          </div>
-        </div>
         <div class="pref-group">
           <label>Mobile Feedback</label>
           <button id="fxToggleBtn" class="ghost-btn" type="button">FX ON</button>
@@ -80,8 +86,30 @@
     </section>
 
     <section class="quick-intel-row" id="quickIntelRow">
-      <article class="glass-card quick-card card-entry">
-        <p class="quick-label">Next Race Countdown</p>
+      <article class="glass-card quick-card card-entry live-hub-card">
+        <p class="quick-label">Live Center</p>
+        <p class="quick-value" id="quickLeader">Loading...</p>
+        <p class="quick-sub" id="quickGap">Loading season rounds</p>
+        <div class="live-hub-grid">
+          <div class="live-hub-cell">
+            <span>Next Race</span>
+            <strong id="quickRaceName">Fetching next Grand Prix</strong>
+          </div>
+          <div class="live-hub-cell">
+            <span>Local Start</span>
+            <strong id="quickRaceTime">--:--</strong>
+          </div>
+          <div class="live-hub-cell wide">
+            <span>Season Progress</span>
+            <div class="season-progress-wrap">
+              <div id="quickSeasonProgress" class="season-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="glass-card quick-card card-entry upcoming-hub-card">
+        <p class="quick-label">Upcoming Race</p>
+        <p class="quick-sub" id="quickRaceDate">Loading...</p>
         <div class="startup-timer" id="startupTimer">
           <div class="timer-cell"><span id="timerDays">00</span><small>D</small></div>
           <div class="timer-sep">:</div>
@@ -92,20 +120,11 @@
           <div class="timer-cell"><span id="timerSeconds">00</span><small>S</small></div>
         </div>
         <p class="quick-value" id="quickCountdown">Loading...</p>
-        <p class="quick-sub" id="quickRaceName">Fetching next Grand Prix</p>
-      </article>
-      <article class="glass-card quick-card card-entry">
-        <p class="quick-label">Race Start (UTC)</p>
-        <p class="quick-value" id="quickRaceDate">Loading...</p>
-        <p class="quick-sub" id="quickRaceTime">--:--</p>
-      </article>
-      <article class="glass-card quick-card card-entry">
-        <p class="quick-label">Season Progress</p>
-        <p class="quick-value" id="quickLeader">Loading...</p>
-        <div class="season-progress-wrap">
-          <div id="quickSeasonProgress" class="season-progress-bar"></div>
+        <div id="quickTrackLayout" class="quick-track-layout"></div>
+        <div class="upcoming-race-actions quick-actions">
+          <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
+          <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
         </div>
-        <p class="quick-sub" id="quickGap">Loading season rounds</p>
       </article>
     </section>
 
