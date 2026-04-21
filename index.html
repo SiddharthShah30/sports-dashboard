@@ -51,6 +51,17 @@
           <input id="globalSearchInput" class="select-input pref-select top-search" placeholder="Search teams, drivers, years" />
         </div>
         <div class="pref-group">
+          <label>Time Mode</label>
+          <div class="pill-toggle" id="timeModeToggle" role="group" aria-label="Timezone mode">
+            <button class="small-btn active" data-time-mode="local" type="button">Your Time</button>
+            <button class="small-btn" data-time-mode="track" type="button">Track Time</button>
+          </div>
+        </div>
+        <div class="pref-group">
+          <label>Mobile Feedback</label>
+          <button id="fxToggleBtn" class="ghost-btn" type="button">FX ON</button>
+        </div>
+        <div class="pref-group">
           <label for="favoriteTeamSelect">Favorite Team</label>
           
           <select id="favoriteTeamSelect" class="select-input pref-select">

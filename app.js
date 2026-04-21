@@ -1,7 +1,9 @@
 const STORAGE_KEYS = {
   module: "paddock:module",
   favoriteDriver: "paddock:favoriteDriver",
-  favoriteTeam: "paddock:favoriteTeam"
+  favoriteTeam: "paddock:favoriteTeam",
+  timeMode: "paddock:timeMode",
+  fxEnabled: "paddock:fxEnabled"
 };
 
 const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
@@ -22,6 +24,8 @@ const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
   favoriteTeam: localStorage.getItem(STORAGE_KEYS.favoriteTeam) || "",
+  timeMode: localStorage.getItem(STORAGE_KEYS.timeMode) || "local",
+  fxEnabled: localStorage.getItem(STORAGE_KEYS.fxEnabled) !== "off",
   f1: {
     drivers: [],
     constructors: [],
@@ -37,7 +41,11 @@ const state = {
     infoView: "teams",
     searchQuery: "",
     historyData: [],
-    historyYear: 0
+    historyYear: 0,
+    seasonCalendar: [],
+    seasonCompletedRound: 0,
+    expandedRound: 0,
+    lastNewsItems: []
   }
 };
 
@@ -94,6 +102,43 @@ function qsa(selector) {
 function toNum(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function triggerMicroFeedback() {
+  if (!state.fxEnabled) {
+    return;
+  }
+  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    navigator.vibrate(12);
+  }
+}
+
+function formatEventTimeByMode(date, time, mode = state.timeMode) {
+  if (!date) {
+    return { dateLabel: "TBD", timeLabel: "TBD", zoneLabel: "UTC" };
+  }
+
+  const iso = `${date}T${time || "00:00:00Z"}`;
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) {
+    return { dateLabel: date, timeLabel: time || "TBD", zoneLabel: "UTC" };
+  }
+
+  const useUtc = mode === "track";
+  const userZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
+  const zoneLabel = useUtc ? "UTC (Track)" : userZone;
+  const optionsDate = useUtc
+    ? { year: "numeric", month: "short", day: "2-digit", timeZone: "UTC" }
+    : { year: "numeric", month: "short", day: "2-digit" };
+  const optionsTime = useUtc
+    ? { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" }
+    : { hour: "2-digit", minute: "2-digit", hour12: false };
+
+  return {
+    dateLabel: new Intl.DateTimeFormat("en-US", optionsDate).format(dt),
+    timeLabel: new Intl.DateTimeFormat("en-US", optionsTime).format(dt),
+    zoneLabel
+  };
 }
 
 function escapeHtml(value) {
@@ -316,7 +361,7 @@ function getRacePhase(nextRace) {
 }
 
 function applyTeamAccentTheme(teamName) {
-  const accent = TEAM_ACCENTS[teamName] || "#ff1f3d";
+  const accent = TEAM_ACCENTS[teamName] || "#E10600";
   const normalized = accent.replace("#", "");
   const full = normalized.length === 3
     ? normalized.split("").map((char) => `${char}${char}`).join("")
@@ -357,21 +402,32 @@ function safeTeamColor(index) {
 }
 
 async function fetchF1CoreData() {
-  const [driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData] = await Promise.all([
+  const [driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData, seasonData] = await Promise.all([
     fetchErgast("/current/driverStandings.json"),
     fetchErgast("/current/constructorStandings.json"),
     fetchErgast("/current/next.json"),
     fetchErgast("/current/last/results.json"),
-    fetchErgast("/current/last/qualifying.json")
+    fetchErgast("/current/last/qualifying.json"),
+    fetchErgast("/current.json?limit=100")
   ]);
 
   const drivers = driverData?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
   const constructors = constructorData?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
   const nextRace = nextRaceData?.MRData?.RaceTable?.Races?.[0] || null;
+  const seasonCalendar = seasonData?.MRData?.RaceTable?.Races || [];
   const lastRaceResults = lastResultsData?.MRData?.RaceTable?.Races?.[0]?.Results || [];
   const lastQualifying = lastQualifyingData?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
+  const completedRound = toNum(lastResultsData?.MRData?.RaceTable?.Races?.[0]?.round);
 
-  return { drivers, constructors, nextRace, lastRaceResults, lastQualifying };
+  return {
+    drivers,
+    constructors,
+    nextRace,
+    seasonCalendar,
+    completedRound,
+    lastRaceResults,
+    lastQualifying
+  };
 }
 
 async function fetchDriverTrajectory(driverId) {
@@ -710,6 +766,220 @@ function renderMiniStandingsRows(rows, type) {
   `;
 }
 
+function renderBreakingNews(newsItems) {
+  const ticker = qs("#breakingTicker");
+  const rail = qs("#headlineRail");
+  if (!ticker || !rail) {
+    return;
+  }
+
+  if (!newsItems.length) {
+    ticker.textContent = "No live headlines available right now.";
+    rail.innerHTML = "<p class='empty-state'>Headlines unavailable.</p>";
+    return;
+  }
+
+  ticker.textContent = newsItems.map((item) => item.title).join("  |  ");
+  rail.innerHTML = newsItems
+    .slice(0, 3)
+    .map(
+      (item) => `
+      <a class="headline-card" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">
+        <p class="kicker">${escapeHtml(item.source)}</p>
+        <strong>${escapeHtml(item.title)}</strong>
+      </a>
+    `
+    )
+    .join("");
+}
+
+function renderSeasonCalendar(races) {
+  const host = qs("#seasonCalendarStrip");
+  const detail = qs("#seasonCalendarDetail");
+  if (!host || !detail) {
+    return;
+  }
+
+  if (!races.length) {
+    host.innerHTML = "<p class='empty-state'>Season calendar unavailable.</p>";
+    detail.innerHTML = "";
+    return;
+  }
+
+  if (!state.f1.expandedRound) {
+    state.f1.expandedRound = state.f1.seasonCompletedRound + 1;
+  }
+
+  host.innerHTML = races
+    .map((race) => {
+      const round = toNum(race.round);
+      const isCompleted = round <= state.f1.seasonCompletedRound;
+      const isActive = round === state.f1.expandedRound;
+      const formatted = formatEventTimeByMode(race.date, race.time);
+      return `
+        <button class="season-race-card ${isCompleted ? "completed" : "upcoming"} ${isActive ? "active" : ""}" data-race-round="${round}" type="button">
+          <span class="kicker">Round ${round}</span>
+          <strong>${escapeHtml(race.raceName)}</strong>
+          <span>${escapeHtml(race.Circuit?.Location?.locality || "Unknown")}</span>
+          <span>${escapeHtml(formatted.dateLabel)}</span>
+        </button>
+      `;
+    })
+    .join("");
+
+  const selected = races.find((race) => toNum(race.round) === state.f1.expandedRound) || races[0];
+  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time);
+  detail.innerHTML = `
+    <div class="season-weekend">
+      <strong>${escapeHtml(selected?.raceName || "Selected Race")}</strong>
+      <p>${escapeHtml(selected?.Circuit?.circuitName || "Circuit TBD")} • ${escapeHtml(selected?.Circuit?.Location?.country || "")}</p>
+      <p>FP1/FP2: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
+      <p>Qualifying: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
+      <p>Race: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
+    </div>
+  `;
+}
+
+function setupSeasonCalendarEvents(races) {
+  qsa("[data-race-round]").forEach((button) => {
+    button.onclick = () => {
+      state.f1.expandedRound = toNum(button.dataset.raceRound);
+      triggerMicroFeedback();
+      renderSeasonCalendar(races);
+    };
+  });
+}
+
+function renderFooterGrid(drivers, constructors, selectedDriver) {
+  const host = qs("#stickyDataGrid");
+  if (!host) {
+    return;
+  }
+
+  const topDrivers = drivers.slice(0, 5);
+  const topTeams = constructors.slice(0, 5);
+  host.innerHTML = `
+    <section class="footer-grid-col">
+      <div class="footer-grid-head">
+        <h4>Drivers Standing</h4>
+        <button id="viewAllDriversBtn" class="small-btn" type="button">View All</button>
+      </div>
+      ${topDrivers
+        .map(
+          (row) => `<div class="footer-row"><span>P${row.position} ${escapeHtml(row.Driver.familyName)}</span><strong>${escapeHtml(row.points)} pts</strong></div>`
+        )
+        .join("")}
+    </section>
+    <section class="footer-grid-col">
+      <div class="footer-grid-head"><h4>Constructors</h4></div>
+      ${topTeams
+        .map((row) => {
+          const teamName = row.Constructor.name;
+          const logo = state.f1.teamLogoMap[teamName] || "";
+          return `<div class="footer-row">${logo ? `<img class="team-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(teamName)}" loading="lazy" onerror="this.style.display='none'" />` : ""}<span>${escapeHtml(teamName)}</span><strong>${escapeHtml(row.points)} pts</strong></div>`;
+        })
+        .join("")}
+    </section>
+    <section class="footer-grid-col">
+      <div class="footer-grid-head"><h4>My Paddock</h4></div>
+      <div class="footer-row"><span>Favorite Team</span><strong>${escapeHtml(state.favoriteTeam || "Not set")}</strong></div>
+      <div class="footer-row"><span>Favorite Driver</span><strong>${escapeHtml(selectedDriver ? `${selectedDriver.Driver.givenName} ${selectedDriver.Driver.familyName}` : "Not set")}</strong></div>
+      <div class="footer-row"><span>Time Mode</span><strong>${state.timeMode === "track" ? "Track Time (UTC)" : "Your Time"}</strong></div>
+      <p class="inline-meta">Sticky quick-access grid for burst sessions.</p>
+    </section>
+  `;
+
+  const viewAllBtn = qs("#viewAllDriversBtn");
+  if (viewAllBtn) {
+    viewAllBtn.onclick = () => {
+      const list = qs("#driverStandings");
+      if (list) {
+        list.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      triggerMicroFeedback();
+    };
+  }
+}
+
+function setupTimeModeToggle() {
+  const wrap = qs("#timeModeToggle");
+  if (!wrap) {
+    return;
+  }
+
+  qsa("#timeModeToggle [data-time-mode]").forEach((button) => {
+    const active = button.dataset.timeMode === state.timeMode;
+    button.classList.toggle("active", active);
+    button.onclick = () => {
+      state.timeMode = button.dataset.timeMode || "local";
+      localStorage.setItem(STORAGE_KEYS.timeMode, state.timeMode);
+      triggerMicroFeedback();
+      renderModule();
+    };
+  });
+
+  const fxBtn = qs("#fxToggleBtn");
+  if (fxBtn) {
+    fxBtn.textContent = state.fxEnabled ? "FX ON" : "FX OFF";
+    fxBtn.onclick = () => {
+      state.fxEnabled = !state.fxEnabled;
+      localStorage.setItem(STORAGE_KEYS.fxEnabled, state.fxEnabled ? "on" : "off");
+      fxBtn.textContent = state.fxEnabled ? "FX ON" : "FX OFF";
+      triggerMicroFeedback();
+    };
+  }
+}
+
+function setupUpcomingRaceActions(nextRace) {
+  const reminderBtn = qs("#setReminderBtn");
+  const calendarBtn = qs("#addCalendarBtn");
+  if (!reminderBtn || !calendarBtn || !nextRace?.date) {
+    return;
+  }
+
+  const startIso = `${nextRace.date}T${nextRace.time || "00:00:00Z"}`;
+  const endIso = new Date(new Date(startIso).getTime() + 2 * 60 * 60 * 1000).toISOString();
+
+  reminderBtn.onclick = async () => {
+    triggerMicroFeedback();
+    if (typeof Notification !== "undefined") {
+      const perm = await Notification.requestPermission();
+      if (perm === "granted") {
+        new Notification("Paddock Reminder", {
+          body: `${nextRace.raceName} starts soon (${state.timeMode === "track" ? "Track Time" : "Your Time"}).`
+        });
+        return;
+      }
+    }
+    alert("Reminder created in-session. Use Add to Calendar for persistent alerts.");
+  };
+
+  calendarBtn.onclick = () => {
+    triggerMicroFeedback();
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Paddock Dashboard//EN",
+      "BEGIN:VEVENT",
+      `UID:${Date.now()}@paddock-dashboard`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+      `DTSTART:${new Date(startIso).toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+      `DTEND:${endIso.replace(/[-:]/g, "").split(".")[0]}Z`,
+      `SUMMARY:${nextRace.raceName}`,
+      `DESCRIPTION:Formula 1 race reminder from The Paddock Dashboard`,
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${(nextRace.raceName || "f1-race").replace(/\s+/g, "-").toLowerCase()}.ics`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+}
+
 function setupCountdown(raceDateIso) {
   const countdownEl = qs("#countdownValue");
   if (!countdownEl || !raceDateIso) {
@@ -726,6 +996,10 @@ function setupCountdown(raceDateIso) {
     const quickCountdown = qs("#quickCountdown");
     if (quickCountdown) {
       quickCountdown.textContent = countdownText;
+    }
+    const upcomingCountdown = qs("#upcomingCountdownXL");
+    if (upcomingCountdown) {
+      upcomingCountdown.textContent = countdownText;
     }
     const dayCell = qs("#timerDays");
     const hourCell = qs("#timerHours");
@@ -778,6 +1052,7 @@ function setupCountdown(raceDateIso) {
 function setupDriverListEvents() {
   qsa("[data-driver-id]").forEach((button) => {
     button.addEventListener("click", async () => {
+      triggerMicroFeedback();
       state.f1.selectedDriverId = button.dataset.driverId;
       localStorage.setItem(STORAGE_KEYS.favoriteDriver, state.f1.selectedDriverId);
       state.favoriteDriver = state.f1.selectedDriverId;
@@ -798,6 +1073,7 @@ function setupHeadToHeadEvents() {
   }
 
   compareBtn.addEventListener("click", async () => {
+    triggerMicroFeedback();
     output.innerHTML = "<p class='empty-state'>Comparing pace and finish metrics...</p>";
 
     try {
@@ -848,12 +1124,14 @@ function setupPreferenceControls(drivers, constructors) {
   driverSelect.value = state.favoriteDriver || "";
 
   teamSelect.onchange = () => {
+    triggerMicroFeedback();
     state.favoriteTeam = teamSelect.value;
     localStorage.setItem(STORAGE_KEYS.favoriteTeam, state.favoriteTeam);
     setHeaderMeta();
   };
 
   driverSelect.onchange = async () => {
+    triggerMicroFeedback();
     state.favoriteDriver = driverSelect.value;
     state.f1.selectedDriverId = driverSelect.value;
     localStorage.setItem(STORAGE_KEYS.favoriteDriver, state.favoriteDriver);
@@ -1024,6 +1302,7 @@ function setupInfoExplorerControls(drivers, constructors) {
 
   tabs.forEach((tab) => {
     tab.onclick = () => {
+      triggerMicroFeedback();
       state.f1.infoView = tab.dataset.view;
       renderInfoExplorer(drivers, constructors);
     };
@@ -1167,6 +1446,44 @@ function upsertTrajectoryChart(labels, values) {
 function renderF1Skeleton() {
   const grid = qs("#dashboardGrid");
   grid.innerHTML = `
+    <article class="glass-card card-span-12 card-entry">
+      <h3 class="card-title">Formula 1 Live Center <span class="inline-meta">Breaking updates</span></h3>
+      <div class="breaking-ticker-wrap">
+        <span class="live-dot"></span>
+        <div id="breakingTicker" class="breaking-ticker">Loading headlines...</div>
+      </div>
+      <div id="headlineRail" class="headline-rail">
+        <p class="empty-state">Loading feature cards...</p>
+      </div>
+    </article>
+
+    <article class="glass-card card-span-12 card-entry">
+      <h3 class="card-title">Upcoming Race <span class="inline-meta" id="upcomingRaceMeta">Engagement driver</span></h3>
+      <div class="upcoming-race-grid">
+        <div>
+          <p class="inline-meta">Circuit layout</p>
+          <div id="upcomingRaceTrack"></div>
+        </div>
+        <div class="upcoming-race-countdown">
+          <p class="kicker">Countdown to Lights Out</p>
+          <p class="race-countdown-xl" id="upcomingCountdownXL">--</p>
+          <p class="inline-meta" id="upcomingRaceTimeMeta">Syncing race schedule...</p>
+          <div class="upcoming-race-actions">
+            <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
+            <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="glass-card card-span-12 card-entry">
+      <h3 class="card-title">Season Calendar <span class="inline-meta">Tap race card for weekend schedule</span></h3>
+      <div id="seasonCalendarStrip" class="season-calendar-strip">
+        <p class="empty-state">Loading season roadmap...</p>
+      </div>
+      <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
+    </article>
+
     <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
       <div class="live-state-wrap">
@@ -1255,6 +1572,13 @@ function renderF1Skeleton() {
       </div>
     </article>
 
+    <article class="glass-card card-span-12 card-entry sticky-data-grid-card">
+      <h3 class="card-title">Data Grid Footer <span class="inline-meta">Fast, sticky access</span></h3>
+      <div id="stickyDataGrid" class="sticky-data-grid">
+        <p class="empty-state">Loading standings snapshot...</p>
+      </div>
+    </article>
+
     <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
       <div class="map-modal-card glass-card">
         <div class="map-modal-head">
@@ -1281,10 +1605,20 @@ async function renderF1() {
   });
 
   try {
-    const { drivers, constructors, nextRace, lastRaceResults, lastQualifying } = await fetchF1CoreData();
+    const {
+      drivers,
+      constructors,
+      nextRace,
+      seasonCalendar,
+      completedRound,
+      lastRaceResults,
+      lastQualifying
+    } = await fetchF1CoreData();
     state.f1.drivers = drivers;
     state.f1.constructors = constructors;
     state.f1.nextRace = nextRace;
+    state.f1.seasonCalendar = seasonCalendar;
+    state.f1.seasonCompletedRound = completedRound;
     state.f1.lastRaceResults = lastRaceResults;
     state.f1.lastQualifying = lastQualifying;
 
@@ -1303,12 +1637,14 @@ async function renderF1() {
 
     const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
     const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
+    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time);
+    setupTimeModeToggle();
     qs("#raceMeta").textContent = nextRace
       ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
       : "No race scheduled";
     qs("#raceDay").textContent = raceDateParts.weekday;
-    qs("#raceDate").textContent = raceDateParts.dateLabel;
-    qs("#raceTime").textContent = raceDateParts.timeLabel;
+    qs("#raceDate").textContent = raceTimeMode.dateLabel;
+    qs("#raceTime").textContent = `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
 
     const racePhase = getRacePhase(nextRace);
     const raceStateBadge = qs("#raceStateBadge");
@@ -1333,8 +1669,8 @@ async function renderF1() {
     renderQuickIntelStrip({
       countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
       raceName: nextRace?.raceName || "No upcoming race",
-      raceDate: `${raceDateParts.weekday}, ${raceDateParts.dateLabel}`,
-      raceTime: `${raceDateParts.timeLabel} UTC`,
+      raceDate: `${raceDateParts.weekday}, ${raceTimeMode.dateLabel}`,
+      raceTime: `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`,
       leader: leaderName,
       gap: `${pointsGap} • ${seasonSummary.completed}/${seasonSummary.totalRounds} rounds`,
       seasonCompleted: seasonSummary.completed,
@@ -1351,6 +1687,21 @@ async function renderF1() {
     const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
 
     qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
+    qs("#upcomingRaceTrack").innerHTML = renderTrackMap(circuitId);
+    const upcomingMeta = qs("#upcomingRaceMeta");
+    if (upcomingMeta) {
+      upcomingMeta.textContent = nextRace
+        ? `${nextRace.raceName} • ${nextRace.Circuit.Location.country}`
+        : "Upcoming race unavailable";
+    }
+    const upcomingTimeMeta = qs("#upcomingRaceTimeMeta");
+    if (upcomingTimeMeta) {
+      upcomingTimeMeta.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
+    }
+    setupUpcomingRaceActions(nextRace);
+
+    renderSeasonCalendar(seasonCalendar);
+    setupSeasonCalendarEvents(seasonCalendar);
 
     qs("#latestGridLayout").innerHTML = renderStartingGridLayout(lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);
@@ -1441,7 +1792,10 @@ async function renderF1() {
 
     setupKnowledgeHub();
     const newsItems = await fetchLatestNews();
+    state.f1.lastNewsItems = newsItems;
+    renderBreakingNews(newsItems);
     renderNewsList(newsItems);
+    renderFooterGrid(drivers, constructors, selectedDriver);
   } catch (error) {
     renderQuickIntelStrip({
       countdown: "Unavailable",
@@ -1588,6 +1942,7 @@ function renderNBA() {
 function renderModule() {
   setActiveTab();
   setHeaderMeta();
+  setupTimeModeToggle();
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
@@ -1620,6 +1975,7 @@ function renderModule() {
 function bindGlobalEvents() {
   qsa(".tab-btn").forEach((button) => {
     button.addEventListener("click", () => {
+      triggerMicroFeedback();
       state.activeModule = button.dataset.module;
       localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
       renderModule();

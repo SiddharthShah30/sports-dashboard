@@ -9,8 +9,8 @@
   --text-0: #f6f8ff;
   --text-1: #c7d0e2;
   --text-2: #96a3bd;
-  --accent: #ff1f3d;
-  --accent-rgb: 255, 31, 61;
+  --accent: #e10600;
+  --accent-rgb: 225, 6, 0;
   --accent-2: #ff5c74;
   --ok: #45d29a;
   --warn: #ffc94a;
@@ -189,6 +189,16 @@ body {
 .pref-select {
   min-width: 180px;
   height: 36px;
+}
+
+.pill-toggle {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.pill-toggle .small-btn {
+  padding: 0.42rem 0.72rem;
+  font-size: 0.77rem;
 }
 
 .top-search {
@@ -655,6 +665,185 @@ body {
   height: 100%;
 }
 
+.breaking-ticker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.5rem 0.62rem;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.8);
+  animation: pulseLive 1.25s infinite;
+}
+
+.breaking-ticker {
+  white-space: nowrap;
+  animation: tickerMove 22s linear infinite;
+  color: var(--text-1);
+}
+
+.headline-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.66rem;
+  margin-top: 0.72rem;
+}
+
+.headline-card {
+  text-decoration: none;
+  color: var(--text-0);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.7rem;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  transition: transform 150ms ease, border-color 150ms ease;
+}
+
+.headline-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb), 0.7);
+}
+
+.headline-card strong {
+  line-height: 1.24;
+}
+
+.upcoming-race-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.upcoming-race-countdown {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.74rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.race-countdown-xl {
+  margin: 0.2rem 0;
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-size: clamp(1.9rem, 4vw, 3rem);
+}
+
+.upcoming-race-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.52rem;
+  margin-top: 0.55rem;
+}
+
+.season-calendar-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(220px, 260px);
+  gap: 0.65rem;
+  overflow-x: auto;
+  padding-bottom: 0.32rem;
+}
+
+.season-race-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-0);
+  padding: 0.62rem;
+  text-align: left;
+  display: grid;
+  gap: 0.2rem;
+  cursor: pointer;
+}
+
+.season-race-card.completed {
+  opacity: 0.56;
+}
+
+.season-race-card.upcoming {
+  opacity: 1;
+}
+
+.season-race-card.active {
+  border-color: rgba(var(--accent-rgb), 0.78);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.34) inset;
+}
+
+.season-race-card strong {
+  line-height: 1.22;
+}
+
+.season-calendar-detail {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.72rem;
+  margin-top: 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.season-weekend p {
+  margin: 0.24rem 0;
+  color: var(--text-1);
+}
+
+.sticky-data-grid-card {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 18;
+}
+
+.sticky-data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.footer-grid-col {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.64rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.footer-grid-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.45rem;
+}
+
+.footer-grid-head h4 {
+  margin: 0;
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.footer-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.34rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+}
+
+.footer-row:last-child {
+  border-bottom: 0;
+}
+
 .track-line {
   fill: none;
   stroke: #f4f7ff;
@@ -945,6 +1134,24 @@ body {
   }
 }
 
+@keyframes tickerMove {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-45%);
+  }
+}
+
+@keyframes pulseLive {
+  0% {
+    box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(var(--accent-rgb), 0);
+  }
+}
+
 body[data-module="f1"] .hero {
   border-top: 3px solid var(--accent);
 }
@@ -978,8 +1185,18 @@ body[data-module="nba"] .hero {
     grid-template-columns: 1fr;
   }
 
+  .headline-rail,
+  .upcoming-race-grid,
+  .sticky-data-grid {
+    grid-template-columns: 1fr;
+  }
+
   .hero,
   .quick-intel-row {
+    position: static;
+  }
+
+  .sticky-data-grid-card {
     position: static;
   }
 
