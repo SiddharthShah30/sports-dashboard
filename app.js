@@ -2242,7 +2242,10 @@ async function renderF1() {
     const prediction = await buildRacePrediction(drivers, nextRace, seasonYear);
     renderRacePrediction(prediction);
 
-    qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
+    const constructorBars = qs("#constructorBars");
+    if (constructorBars) {
+      constructorBars.innerHTML = renderConstructorBars(constructors);
+    }
     if (state.f1.historyYear !== seasonYear || !state.f1.historyData.length) {
       state.f1.historyData = await fetchPreviousYearsChampions(seasonYear, 8);
       state.f1.historyYear = seasonYear;
