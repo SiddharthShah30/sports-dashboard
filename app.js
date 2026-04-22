@@ -180,6 +180,30 @@ const COUNTRY_TIMEZONES = {
   China: "Asia/Shanghai"
 };
 
+const COUNTRY_FLAGS = {
+  Australia: "🇦🇺",
+  Bahrain: "🇧🇭",
+  Saudi_Arabia: "🇸🇦",
+  Italy: "🇮🇹",
+  "United States": "🇺🇸",
+  Monaco: "🇲🇨",
+  Spain: "🇪🇸",
+  Canada: "🇨🇦",
+  Austria: "🇦🇹",
+  "United Kingdom": "🇬🇧",
+  Hungary: "🇭🇺",
+  Belgium: "🇧🇪",
+  Netherlands: "🇳🇱",
+  Azerbaijan: "🇦🇿",
+  Singapore: "🇸🇬",
+  Japan: "🇯🇵",
+  Qatar: "🇶🇦",
+  Mexico: "🇲🇽",
+  Brazil: "🇧🇷",
+  UAE: "🇦🇪",
+  China: "🇨🇳"
+};
+
 function qs(selector) {
   return document.querySelector(selector);
 }
@@ -363,59 +387,73 @@ function setActiveTab() {
   });
 }
 
-function renderQuickIntelStrip({
-  countdown = "--",
+function weatherIconFromSummary(summary) {
+  const text = String(summary || "").toLowerCase();
+  if (text.includes("rain") || text.includes("storm") || text.includes("code 6") || text.includes("code 8") || text.includes("code 9")) {
+    return "🌧️";
+  }
+  if (text.includes("wind")) {
+    return "💨";
+  }
+  if (text.includes("cloud") || text.includes("code 2") || text.includes("code 3")) {
+    return "☁️";
+  }
+  if (text.includes("fog")) {
+    return "🌫️";
+  }
+  return "☀️";
+}
+
+function updateLiveHUD({
   raceName = "No race loaded",
-  raceDate = "--",
-  raceTime = "--",
-  leader = "--",
-  gap = "--",
+  country = "",
+  localTime = "--",
+  countdown = "--",
+  weather = "Loading...",
   seasonCompleted = 0,
   seasonTotal = 0
 }) {
-  const quickCountdown = qs("#quickCountdown");
-  const quickRaceName = qs("#quickRaceName");
-  const quickRaceTime = qs("#quickRaceTime");
-  const quickRaceScheduleDate = qs("#quickRaceScheduleDate");
-  const quickSessionFp1 = qs("#quickSessionFp1");
-  const quickSessionFp2 = qs("#quickSessionFp2");
-  const quickSessionQuali = qs("#quickSessionQuali");
-  const quickSessionRace = qs("#quickSessionRace");
-  const quickLeader = qs("#quickLeader");
-  const quickGap = qs("#quickGap");
-  const seasonBar = qs("#quickSeasonProgress");
-  if (!quickCountdown || !quickRaceName || !quickRaceTime || !quickLeader || !quickGap || !seasonBar) {
+  const hudRaceName = qs("#hudRaceName");
+  const hudRaceFlag = qs("#hudRaceFlag");
+  const hudLocalTime = qs("#hudLocalTime");
+  const hudCountdown = qs("#hudCountdown");
+  const hudWeatherIcon = qs("#hudWeatherIcon");
+  const hudWeatherLabel = qs("#hudWeatherLabel");
+  const hudSeasonProgress = qs("#hudSeasonProgress");
+  const hudSeasonText = qs("#hudSeasonText");
+
+  if (!hudRaceName || !hudLocalTime || !hudCountdown || !hudWeatherLabel || !hudSeasonProgress || !hudSeasonText) {
     return;
   }
 
-  quickCountdown.textContent = countdown;
-  quickRaceName.textContent = raceName;
-  quickRaceTime.textContent = raceTime;
-  if (quickRaceScheduleDate) {
-    quickRaceScheduleDate.textContent = raceDate;
+  hudRaceName.textContent = raceName;
+  if (hudRaceFlag) {
+    const countryRaw = String(country || "");
+    const countryKey = countryRaw.replaceAll(" ", "_");
+    hudRaceFlag.textContent = COUNTRY_FLAGS[countryRaw] || COUNTRY_FLAGS[countryKey] || "🏁";
   }
-  if (quickSessionFp1) {
-    quickSessionFp1.textContent = `${raceDate} ${raceTime}`;
+  hudLocalTime.textContent = localTime;
+  hudCountdown.textContent = countdown;
+  hudWeatherLabel.textContent = weather;
+  if (hudWeatherIcon) {
+    hudWeatherIcon.textContent = weatherIconFromSummary(weather);
   }
-  if (quickSessionFp2) {
-    quickSessionFp2.textContent = `${raceDate} ${raceTime}`;
-  }
-  if (quickSessionQuali) {
-    quickSessionQuali.textContent = `${raceDate} ${raceTime}`;
-  }
-  if (quickSessionRace) {
-    quickSessionRace.textContent = `${raceDate} ${raceTime}`;
-  }
-  quickLeader.textContent = leader;
-  quickGap.textContent = gap;
+
   const pct = seasonTotal > 0 ? Math.min(100, Math.max(0, (seasonCompleted / seasonTotal) * 100)) : 0;
-  seasonBar.style.width = `${pct}%`;
+  hudSeasonProgress.style.width = `${pct}%`;
+  hudSeasonText.textContent = `${seasonCompleted} / ${seasonTotal} rounds`;
 }
 
 function setHeaderMeta() {
   const meta = SPORT_META[state.activeModule];
-  qs("#moduleTag").textContent = meta.tag;
-  qs("#moduleHeadline").textContent = meta.headline;
+  const moduleTag = qs("#moduleTag");
+  const moduleHeadline = qs("#moduleHeadline");
+  if (moduleTag) {
+    moduleTag.textContent = meta.tag;
+  }
+  if (moduleHeadline) {
+    moduleHeadline.textContent = meta.headline;
+  }
   const favoriteDriverEntry = state.f1.drivers.find((entry) => entry.Driver.driverId === state.favoriteDriver);
   const favoriteDriverLabel = favoriteDriverEntry
     ? `${favoriteDriverEntry.Driver.givenName} ${favoriteDriverEntry.Driver.familyName}`
@@ -427,7 +465,10 @@ function setHeaderMeta() {
   if (favoriteDriverLabel) {
     favoriteBits.push(`Driver: ${favoriteDriverLabel}`);
   }
-  qs("#favoriteLabel").textContent = favoriteBits.length ? favoriteBits.join(" | ") : "No favorites selected";
+  const favoriteLabel = qs("#favoriteLabel");
+  if (favoriteLabel) {
+    favoriteLabel.textContent = favoriteBits.length ? favoriteBits.join(" | ") : "No favorites selected";
+  }
   applyTeamAccentTheme(state.favoriteTeam);
   document.body.setAttribute("data-module", state.activeModule);
 }
@@ -463,28 +504,6 @@ function formatCountdown(targetIso) {
   const seconds = Math.floor((diff % minuteMs) / secondMs);
 
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-}
-
-function getCountdownParts(targetIso) {
-  const now = Date.now();
-  const target = new Date(targetIso).getTime();
-  const diff = Math.max(0, target - now);
-
-  const dayMs = 1000 * 60 * 60 * 24;
-  const hourMs = 1000 * 60 * 60;
-  const minuteMs = 1000 * 60;
-
-  const days = Math.floor(diff / dayMs);
-  const hours = Math.floor((diff % dayMs) / hourMs);
-  const minutes = Math.floor((diff % hourMs) / minuteMs);
-  const seconds = Math.floor((diff % minuteMs) / 1000);
-
-  return {
-    days: String(days).padStart(2, "0"),
-    hours: String(hours).padStart(2, "0"),
-    minutes: String(minutes).padStart(2, "0"),
-    seconds: String(seconds).padStart(2, "0")
-  };
 }
 
 function getRacePhase(nextRace) {
@@ -894,6 +913,9 @@ function renderStandingsList(drivers) {
       const fallbackAvatar = getAvatarUrl("", driverName);
       const form = state.f1.recentFormMap[id] || [];
       const valueIndex = computeValueIndex(driver);
+      const secondaryMeta = isActive
+        ? `${team} | ${points} pts | VI ${valueIndex}`
+        : `${team} | ${points} pts`;
 
       return `
         <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
@@ -901,8 +923,8 @@ function renderStandingsList(drivers) {
             <img class="driver-avatar" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(fallbackAvatar)}'" />
             <div class="driver-copy">
               <strong>#${driver.position} ${driverName} (${code})</strong>
-              <span>${team} | ${points} pts | VI ${valueIndex}</span>
-              ${renderSparkline(form)}
+              <span>${secondaryMeta}</span>
+              ${isActive ? renderSparkline(form) : ""}
             </div>
           </div>
         </button>
@@ -1351,6 +1373,33 @@ function setupTimezoneAndFxControls() {
   }
 }
 
+function setupSettingsDrawer() {
+  const drawer = qs("#settingsDrawer");
+  const openBtn = qs("#openSettingsBtn");
+  const closeBtn = qs("#closeSettingsBtn");
+  if (!drawer || !openBtn || !closeBtn) {
+    return;
+  }
+
+  const closeDrawer = () => drawer.classList.add("hidden");
+
+  openBtn.onclick = () => {
+    triggerMicroFeedback();
+    drawer.classList.remove("hidden");
+  };
+
+  closeBtn.onclick = () => {
+    triggerMicroFeedback();
+    closeDrawer();
+  };
+
+  drawer.onclick = (event) => {
+    if (event.target === drawer) {
+      closeDrawer();
+    }
+  };
+}
+
 function setupUpcomingRaceActions(nextRace) {
   const reminderBtn = qs("#setReminderBtn");
   const calendarBtn = qs("#addCalendarBtn");
@@ -1398,19 +1447,6 @@ function setupUpcomingRaceActions(nextRace) {
     link.download = `${(nextRace.raceName || "f1-race").replace(/\s+/g, "-").toLowerCase()}.ics`;
     link.click();
     URL.revokeObjectURL(link.href);
-  };
-}
-
-function setupQuickScheduleToggle() {
-  const toggle = qs("#fullScheduleToggle");
-  const details = qs("#quickScheduleDetails");
-  if (!toggle || !details) {
-    return;
-  }
-  toggle.onclick = () => {
-    const isHidden = details.classList.toggle("hidden");
-    toggle.textContent = isHidden ? "Full Schedule" : "Hide Schedule";
-    triggerMicroFeedback();
   };
 }
 
@@ -1467,7 +1503,7 @@ function renderPaddockQuiz(phaseLabel) {
 }
 
 function setupCountdown(raceDateIso) {
-  const countdownEl = qs("#countdownValue");
+  const countdownEl = qs("#hudCountdown");
   if (!countdownEl || !raceDateIso) {
     return;
   }
@@ -1477,32 +1513,7 @@ function setupCountdown(raceDateIso) {
 
   const update = () => {
     const countdownText = formatCountdown(raceDateIso);
-    const parts = getCountdownParts(raceDateIso);
     countdownEl.textContent = countdownText;
-    const quickCountdown = qs("#quickCountdown");
-    if (quickCountdown) {
-      quickCountdown.textContent = countdownText;
-    }
-    const upcomingCountdown = qs("#upcomingCountdownXL");
-    if (upcomingCountdown) {
-      upcomingCountdown.textContent = countdownText;
-    }
-    const dayCell = qs("#timerDays");
-    const hourCell = qs("#timerHours");
-    const minuteCell = qs("#timerMinutes");
-    const secondCell = qs("#timerSeconds");
-    if (dayCell) {
-      dayCell.textContent = parts.days;
-    }
-    if (hourCell) {
-      hourCell.textContent = parts.hours;
-    }
-    if (minuteCell) {
-      minuteCell.textContent = parts.minutes;
-    }
-    if (secondCell) {
-      secondCell.textContent = parts.seconds;
-    }
 
     const pulse = qs("#livePulse");
     if (pulse) {
@@ -1945,8 +1956,125 @@ function upsertTrajectoryChart(labels, values) {
 
 function renderF1Skeleton() {
   const grid = qs("#dashboardGrid");
+  grid.classList.add("f1-layout");
   grid.innerHTML = `
-    <article class="glass-card card-span-12 card-entry">
+    <section class="layout-main">
+      <article class="glass-card card-entry active-live-center">
+        <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+        <div class="live-state-wrap">
+          <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
+          <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
+        </div>
+        <p><strong>Day:</strong> <span id="raceDay">Loading...</span></p>
+        <p><strong>Date:</strong> <span id="raceDate">Loading...</span></p>
+        <p><strong>Time:</strong> <span id="raceTime">Loading...</span></p>
+        <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
+        <div id="telemetryFeed" class="telemetry-feed">
+          <p class="empty-state">Loading telemetry feed...</p>
+        </div>
+        <div id="paddockQuiz" class="paddock-quiz hidden">
+          <h4>Pre-Race Quiz</h4>
+          <p id="quizQuestion">Loading question...</p>
+          <div id="quizOptions" class="quiz-options"></div>
+          <p id="quizScore" class="inline-meta">Score: 0/0</p>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Race Intel <span class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</span></h3>
+        <div class="race-center-stack two-up">
+          <div>
+            <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
+            <div id="raceTrackLayout"></div>
+          </div>
+          <div>
+            <p class="inline-meta">Starting Grid</p>
+            <div id="latestGridLayout"></div>
+          </div>
+        </div>
+        <div class="upcoming-race-actions quick-actions">
+          <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
+          <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Next Race Predictor <span class="inline-meta">Machine model</span></h3>
+        <div id="racePredictionPanel">
+          <p class="empty-state">Running model on current + historical race data...</p>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Season Calendar <span class="inline-meta">Tap race card for weekend schedule</span></h3>
+        <div id="seasonCalendarStrip" class="season-calendar-strip">
+          <p class="empty-state">Loading season roadmap...</p>
+        </div>
+        <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
+      </article>
+    </section>
+
+    <aside class="layout-side">
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Driver Profile Card</h3>
+        <div id="profileStats" class="stats-row"></div>
+        <div style="height: 190px; margin-top: 0.8rem;">
+          <canvas id="trajectoryChart"></canvas>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
+        <div id="driverStandings" class="data-list"></div>
+        <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Constructor Battle <span class="inline-meta">Points gap visualizer</span></h3>
+        <div id="constructorBars"></div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">Head-to-Head Tool</h3>
+        <div class="split" style="margin-bottom:0.75rem;">
+          <select id="driverA" class="select-input"></select>
+          <select id="driverB" class="select-input"></select>
+        </div>
+        <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
+        <div id="comparisonResult" style="margin-top:0.75rem;"></div>
+      </article>
+
+      <article class="glass-card card-entry">
+        <h3 class="card-title">F1 Information Explorer</h3>
+        <div id="infoTabs" class="tab-strip">
+          <button class="small-btn active" data-view="teams">Teams</button>
+          <button class="small-btn" data-view="drivers">Drivers</button>
+          <button class="small-btn" data-view="years">Previous Years</button>
+        </div>
+        <div class="split" style="margin-bottom:0.6rem;">
+          <input id="infoSearchInput" class="select-input" placeholder="Filter teams, drivers, champions" />
+          <button id="knowledgeSearchBtn" class="small-btn">Search Wiki</button>
+        </div>
+        <div class="topic-pills" id="knowledgePills">
+          <button class="small-btn" data-topic="Scuderia Ferrari">Ferrari</button>
+          <button class="small-btn" data-topic="Toto Wolff">Team Principal</button>
+          <button class="small-btn" data-topic="Ayrton Senna">Legend</button>
+          <button class="small-btn" data-topic="Formula One World Drivers' Championship">Championship History</button>
+        </div>
+        <div id="infoPanel" class="info-panel">
+          <p class="empty-state">Loading information...</p>
+        </div>
+        <div class="split" style="margin:0.7rem 0 0.6rem;">
+          <input id="knowledgeInput" class="select-input" placeholder="Read about any F1 subject" />
+          <button id="knowledgeSearchBtn2" class="small-btn">Open Article</button>
+        </div>
+        <div id="knowledgeOutput" class="knowledge-output">
+          <p class="empty-state">Search any F1 topic to read current and historical context.</p>
+        </div>
+      </article>
+    </aside>
+
+    <article class="glass-card card-entry layout-bottom">
       <h3 class="card-title">Formula 1 Live Center <span class="inline-meta">Breaking updates</span></h3>
       <div class="breaking-ticker-wrap">
         <span class="live-dot"></span>
@@ -1957,120 +2085,14 @@ function renderF1Skeleton() {
       </div>
     </article>
 
-    <article class="glass-card card-span-12 card-entry">
-      <h3 class="card-title">Season Calendar <span class="inline-meta">Tap race card for weekend schedule</span></h3>
-      <div id="seasonCalendarStrip" class="season-calendar-strip">
-        <p class="empty-state">Loading season roadmap...</p>
-      </div>
-      <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry active-live-center">
-      <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
-      <div class="live-state-wrap">
-        <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
-        <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
-      </div>
-      <p><strong>Day:</strong> <span id="raceDay">Loading...</span></p>
-      <p><strong>Date:</strong> <span id="raceDate">Loading...</span></p>
-      <p><strong>Time (UTC):</strong> <span id="raceTime">Loading...</span></p>
-      <p><strong>Countdown:</strong> <span id="countdownValue">Loading...</span></p>
-      <p><strong>Weather:</strong> <span id="weatherValue">Loading...</span></p>
-      <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
-      <div id="telemetryFeed" class="telemetry-feed">
-        <p class="empty-state">Loading telemetry feed...</p>
-      </div>
-      <div id="paddockQuiz" class="paddock-quiz hidden">
-        <h4>Pre-Race Quiz</h4>
-        <p id="quizQuestion">Loading question...</p>
-        <div id="quizOptions" class="quiz-options"></div>
-        <p id="quizScore" class="inline-meta">Score: 0/0</p>
-      </div>
-      <div class="race-center-stack">
-        <div>
-          <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
-          <div id="raceTrackLayout"></div>
-        </div>
-        <div>
-          <p class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</p>
-          <div id="latestGridLayout"></div>
-        </div>
-      </div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Next Race Predictor <span class="inline-meta">Machine model</span></h3>
-      <div id="racePredictionPanel">
-        <p class="empty-state">Running model on current + historical race data...</p>
-      </div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
-      <div id="driverStandings" class="data-list"></div>
-      <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Driver Profile Card</h3>
-      <div id="profileStats" class="stats-row"></div>
-      <div style="height: 190px; margin-top: 0.8rem;">
-        <canvas id="trajectoryChart"></canvas>
-      </div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Constructor Battle <span class="inline-meta">Points gap visualizer</span></h3>
-      <div id="constructorBars"></div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Head-to-Head Tool</h3>
-      <div class="split" style="margin-bottom:0.75rem;">
-        <select id="driverA" class="select-input"></select>
-        <select id="driverB" class="select-input"></select>
-      </div>
-      <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
-      <div id="comparisonResult" style="margin-top:0.75rem;"></div>
-    </article>
-
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">F1 Information Explorer</h3>
-      <div id="infoTabs" class="tab-strip">
-        <button class="small-btn active" data-view="teams">Teams</button>
-        <button class="small-btn" data-view="drivers">Drivers</button>
-        <button class="small-btn" data-view="years">Previous Years</button>
-      </div>
-      <div class="split" style="margin-bottom:0.6rem;">
-        <input id="infoSearchInput" class="select-input" placeholder="Filter teams, drivers, champions" />
-        <button id="knowledgeSearchBtn" class="small-btn">Search Wiki</button>
-      </div>
-      <div class="topic-pills" id="knowledgePills">
-        <button class="small-btn" data-topic="Scuderia Ferrari">Ferrari</button>
-        <button class="small-btn" data-topic="Toto Wolff">Team Principal</button>
-        <button class="small-btn" data-topic="Ayrton Senna">Legend</button>
-        <button class="small-btn" data-topic="Formula One World Drivers' Championship">Championship History</button>
-      </div>
-      <div id="infoPanel" class="info-panel">
-        <p class="empty-state">Loading information...</p>
-      </div>
-      <div class="split" style="margin:0.7rem 0 0.6rem;">
-        <input id="knowledgeInput" class="select-input" placeholder="Read about any F1 subject" />
-        <button id="knowledgeSearchBtn2" class="small-btn">Open Article</button>
-      </div>
-      <div id="knowledgeOutput" class="knowledge-output">
-        <p class="empty-state">Search any F1 topic to read current and historical context.</p>
-      </div>
-    </article>
-
-    <article class="glass-card card-span-12 card-entry">
+    <article class="glass-card card-entry layout-bottom">
       <h3 class="card-title">Latest News</h3>
       <div id="newsList" class="news-list">
         <p class="empty-state">Loading latest updates...</p>
       </div>
     </article>
 
-    <article class="glass-card card-span-12 card-entry sticky-data-grid-card">
+    <article class="glass-card card-entry sticky-data-grid-card layout-bottom">
       <h3 class="card-title">Data Grid Footer <span class="inline-meta">Standings and My Paddock focus</span></h3>
       <div id="stickyDataGrid" class="sticky-data-grid">
         <p class="empty-state">Loading standings snapshot...</p>
@@ -2093,14 +2115,13 @@ async function renderF1() {
   renderF1Skeleton();
   clearF1Intervals();
   setLoadingState(true);
-
-  renderQuickIntelStrip({
-    countdown: "Loading...",
+  updateLiveHUD({
     raceName: "Fetching next Grand Prix",
-    raceDate: "Loading...",
-    raceTime: "Loading...",
-    leader: "Loading...",
-    gap: "Calculating"
+    localTime: "Loading...",
+    countdown: "Loading...",
+    weather: "Loading...",
+    seasonCompleted: 0,
+    seasonTotal: 0
   });
 
   try {
@@ -2162,42 +2183,30 @@ async function renderF1() {
     }
     renderPaddockQuiz(racePhase.label);
 
-    const leader = drivers[0];
-    const second = drivers[1];
-    const leaderName = leader ? `${leader.Driver.givenName} ${leader.Driver.familyName}` : "No leader";
-    const pointsGap = leader && second ? `${toNum(leader.points) - toNum(second.points)} pts over P2` : "Gap unavailable";
-
     const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
     const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
     const seasonSummary = await fetchSeasonSummary(trajectory.labels.length);
-
-    renderQuickIntelStrip({
-      countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
-      raceName: nextRace?.raceName || "No upcoming race",
-      raceDate: `${raceDateParts.weekday}, ${raceTimeMode.dateLabel}`,
-      raceTime: `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`,
-      leader: leaderName,
-      gap: `${pointsGap} • ${seasonSummary.completed}/${seasonSummary.totalRounds} rounds`,
-      seasonCompleted: seasonSummary.completed,
-      seasonTotal: seasonSummary.totalRounds
-    });
 
     setupCountdown(raceDateIso);
 
     const lat = nextRace?.Circuit?.Location?.lat;
     const lon = nextRace?.Circuit?.Location?.long;
-    qs("#weatherValue").textContent = await fetchTrackWeather(lat, lon);
+    const weatherSummary = await fetchTrackWeather(lat, lon);
+    updateLiveHUD({
+      raceName: nextRace?.raceName || "No upcoming race",
+      country: nextRace?.Circuit?.Location?.country || "",
+      localTime: `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`,
+      countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
+      weather: weatherSummary,
+      seasonCompleted: seasonSummary.completed,
+      seasonTotal: seasonSummary.totalRounds
+    });
 
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
     const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
 
     qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
-    const quickTrackLayout = qs("#quickTrackLayout");
-    if (quickTrackLayout) {
-      quickTrackLayout.innerHTML = renderTrackMap(circuitId);
-    }
     setupUpcomingRaceActions(nextRace);
-    setupQuickScheduleToggle();
 
     renderSeasonCalendar(seasonCalendar);
     setupSeasonCalendarEvents(seasonCalendar);
@@ -2300,13 +2309,13 @@ async function renderF1() {
     renderNewsList(newsItems);
     renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
-    renderQuickIntelStrip({
-      countdown: "Unavailable",
+    updateLiveHUD({
       raceName: "Data feed issue",
-      raceDate: "Unavailable",
-      raceTime: "Unavailable",
-      leader: "Unavailable",
-      gap: "Unavailable"
+      localTime: "Unavailable",
+      countdown: "Unavailable",
+      weather: "Unavailable",
+      seasonCompleted: 0,
+      seasonTotal: 0
     });
     qs("#dashboardGrid").innerHTML = `
       <article class="glass-card card-span-12">
@@ -2323,7 +2332,16 @@ async function renderF1() {
 
 function renderFootball() {
   const grid = qs("#dashboardGrid");
+  grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  updateLiveHUD({
+    raceName: "Formula 1 module inactive",
+    localTime: "--",
+    countdown: "Switch to F1",
+    weather: "--",
+    seasonCompleted: 0,
+    seasonTotal: 0
+  });
 
   const cards = [
     { title: "League Focus", value: "EPL + La Liga", subtitle: "Swap feeds via adapter" },
@@ -2362,7 +2380,16 @@ function renderFootball() {
 
 function renderCricket() {
   const grid = qs("#dashboardGrid");
+  grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  updateLiveHUD({
+    raceName: "Formula 1 module inactive",
+    localTime: "--",
+    countdown: "Switch to F1",
+    weather: "--",
+    seasonCompleted: 0,
+    seasonTotal: 0
+  });
 
   const cards = [
     { title: "ICC Ranking Lead", value: "India +17", subtitle: "Points over #2" },
@@ -2402,7 +2429,16 @@ function renderCricket() {
 
 function renderNBA() {
   const grid = qs("#dashboardGrid");
+  grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  updateLiveHUD({
+    raceName: "Formula 1 module inactive",
+    localTime: "--",
+    countdown: "Switch to F1",
+    weather: "--",
+    seasonCompleted: 0,
+    seasonTotal: 0
+  });
 
   const cards = [
     { title: "PER Leader", value: "31.4", subtitle: "Season-adjusted" },
@@ -2451,14 +2487,6 @@ function renderModule() {
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
-    renderQuickIntelStrip({
-      countdown: "Switch to F1",
-      raceName: "Quick cards are tuned for Formula 1",
-      raceDate: "--",
-      raceTime: "--",
-      leader: "--",
-      gap: "--"
-    });
   }
 
   switch (state.activeModule) {
@@ -2488,6 +2516,7 @@ function bindGlobalEvents() {
   });
 
   setupResetButton();
+  setupSettingsDrawer();
 }
 
 function init() {

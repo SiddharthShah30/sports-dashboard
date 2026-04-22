@@ -48,6 +48,7 @@
           <option value="America/New_York">New York (ET)</option>
           <option value="Asia/Tokyo">Tokyo (JST)</option>
         </select>
+        <button id="openSettingsBtn" class="small-btn" type="button">Settings</button>
         <button class="profile-chip" type="button" aria-label="User profile">
           <span class="profile-dot">SS</span>
           <span>My Paddock</span>
@@ -57,86 +58,61 @@
   </header>
 
   <main class="dashboard-shell fade-in">
-    <section class="hero glass-card bauhaus-frame">
-      <div>
-        <p class="kicker" id="moduleTag">F1 COMMAND CENTER</p>
-        <h2 id="moduleHeadline">Live telemetry-inspired race intelligence</h2>
+    <section class="live-hud glass-card" id="liveHudBar" aria-live="polite">
+      <div class="hud-item hud-race">
+        <p class="hud-label">Next Race</p>
+        <p class="hud-value"><span id="hudRaceFlag" aria-hidden="true">🏁</span> <span id="hudRaceName" class="loading-skeleton">Fetching next Grand Prix</span></p>
       </div>
-      <div class="hero-right">
-        <div class="pref-group">
-          <label>Mobile Feedback</label>
-          <button id="fxToggleBtn" class="ghost-btn" type="button">FX ON</button>
-        </div>
-        <div class="pref-group">
-          <label for="favoriteTeamSelect">Favorite Team</label>
-          
-          <select id="favoriteTeamSelect" class="select-input pref-select">
-            <option value="">Select team</option>
-          </select>
-        </div>
-        <div class="pref-group">
-          <label for="favoriteDriverSelect">Favorite Driver</label>
-          <select id="favoriteDriverSelect" class="select-input pref-select">
-            <option value="">Select driver</option>
-          </select>
-        </div>
-        <span id="favoriteLabel">No favorites selected</span>
-        <button id="resetPrefsBtn" class="ghost-btn">Reset Preferences</button>
+      <div class="hud-item">
+        <p class="hud-label">Local Start</p>
+        <p id="hudLocalTime" class="hud-value loading-skeleton">--:--</p>
       </div>
-    </section>
-
-    <section class="quick-intel-row" id="quickIntelRow">
-      <article class="glass-card quick-card card-entry live-hub-card">
-        <p class="quick-label">Live Center</p>
-        <p class="quick-value loading-skeleton" id="quickLeader">Loading...</p>
-        <p class="quick-sub loading-skeleton" id="quickGap">Loading season rounds</p>
-        <div class="live-hub-grid">
-          <div class="live-hub-cell">
-            <span>Next Race</span>
-            <strong id="quickRaceName" class="loading-skeleton">Fetching next Grand Prix</strong>
-          </div>
-          <div class="live-hub-cell">
-            <span>Local Start</span>
-            <strong id="quickRaceTime" class="loading-skeleton">--:--</strong>
-          </div>
-          <div class="live-hub-cell wide">
-            <span>Season Progress</span>
-            <div class="season-progress-wrap">
-              <div id="quickSeasonProgress" class="season-progress-bar"></div>
-            </div>
-          </div>
+      <div class="hud-item">
+        <p class="hud-label">Countdown</p>
+        <p id="hudCountdown" class="hud-value loading-skeleton">Loading...</p>
+      </div>
+      <div class="hud-item">
+        <p class="hud-label">Weather</p>
+        <p class="hud-value"><span id="hudWeatherIcon" aria-hidden="true">🌤️</span> <span id="hudWeatherLabel" class="loading-skeleton">Loading...</span></p>
+      </div>
+      <div class="hud-item hud-season">
+        <p class="hud-label">Season Progress</p>
+        <div class="season-progress-wrap">
+          <div id="hudSeasonProgress" class="season-progress-bar"></div>
         </div>
-      </article>
-      <article class="glass-card quick-card card-entry upcoming-hub-card">
-        <p class="quick-label">Upcoming Race</p>
-         <button id="fullScheduleToggle" class="small-btn schedule-toggle" type="button">Full Schedule</button>
-        <div class="startup-timer" id="startupTimer">
-          <div class="timer-cell"><span id="timerDays">00</span><small>D</small></div>
-          <div class="timer-sep">:</div>
-          <div class="timer-cell"><span id="timerHours">00</span><small>H</small></div>
-          <div class="timer-sep">:</div>
-          <div class="timer-cell"><span id="timerMinutes">00</span><small>M</small></div>
-          <div class="timer-sep">:</div>
-          <div class="timer-cell"><span id="timerSeconds">00</span><small>S</small></div>
-        </div>
-        <p class="quick-value loading-skeleton" id="quickCountdown">Loading...</p>
-        <div id="quickScheduleDetails" class="quick-schedule-details hidden">
-          <p class="quick-sub" id="quickRaceScheduleDate">Loading...</p>
-          <p class="quick-sub"><strong>FP1:</strong> <span id="quickSessionFp1">--</span></p>
-          <p class="quick-sub"><strong>FP2:</strong> <span id="quickSessionFp2">--</span></p>
-          <p class="quick-sub"><strong>Qualifying:</strong> <span id="quickSessionQuali">--</span></p>
-          <p class="quick-sub"><strong>Race:</strong> <span id="quickSessionRace">--</span></p>
-        </div>
-        <div id="quickTrackLayout" class="quick-track-layout"></div>
-        <div class="upcoming-race-actions quick-actions">
-          <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
-          <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
-        </div>
-      </article>
+        <p id="hudSeasonText" class="hud-sub">0 / 0 rounds</p>
+      </div>
     </section>
 
     <section id="dashboardGrid" class="dashboard-grid" aria-live="polite"></section>
   </main>
+
+  <aside id="settingsDrawer" class="settings-drawer hidden" aria-label="Paddock settings">
+    <div class="settings-panel glass-card">
+      <div class="settings-head">
+        <h3 class="card-title">Settings</h3>
+        <button id="closeSettingsBtn" class="small-btn" type="button">Close</button>
+      </div>
+      <div class="pref-group">
+        <label>Mobile Feedback</label>
+        <button id="fxToggleBtn" class="ghost-btn" type="button">FX ON</button>
+      </div>
+      <div class="pref-group">
+        <label for="favoriteTeamSelect">Favorite Team</label>
+        <select id="favoriteTeamSelect" class="select-input pref-select">
+          <option value="">Select team</option>
+        </select>
+      </div>
+      <div class="pref-group">
+        <label for="favoriteDriverSelect">Favorite Driver</label>
+        <select id="favoriteDriverSelect" class="select-input pref-select">
+          <option value="">Select driver</option>
+        </select>
+      </div>
+      <p id="favoriteLabel" class="settings-note">No favorites selected</p>
+      <button id="resetPrefsBtn" class="ghost-btn" type="button">Reset Preferences</button>
+    </div>
+  </aside>
 
   <template id="statCardTemplate">
     <article class="glass-card stat-card card-entry">
