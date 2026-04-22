@@ -715,6 +715,98 @@ body.is-loading .loading-skeleton {
   letter-spacing: 0.05em;
 }
 
+.prediction-lead {
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  border-radius: 12px;
+  padding: 0.64rem;
+  margin-bottom: 0.62rem;
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.prediction-kicker {
+  margin: 0;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+}
+
+.prediction-lead h4 {
+  margin: 0.18rem 0 0.2rem;
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.04em;
+  font-size: 1.1rem;
+}
+
+.prediction-sub {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 0.84rem;
+}
+
+.prediction-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.prediction-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.5rem 0.58rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.prediction-row strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.prediction-row p {
+  margin: 0.16rem 0 0;
+  color: var(--text-1);
+  font-size: 0.8rem;
+}
+
+.prediction-prob-wrap {
+  min-width: 120px;
+  text-align: right;
+}
+
+.prediction-prob-wrap span {
+  display: block;
+  color: var(--text-1);
+  font-size: 0.8rem;
+  margin-bottom: 0.22rem;
+}
+
+.prediction-prob-bar {
+  width: 120px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  margin-left: auto;
+}
+
+.prediction-prob-bar div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.95), rgba(255, 255, 255, 0.8));
+}
+
+.prediction-disclaimer {
+  margin: 0.45rem 0 0;
+  color: #ffd7a3;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .quiz-options {
   display: flex;
   flex-wrap: wrap;
@@ -1496,5 +1588,16 @@ body[data-module="nba"] .hero {
 
   .profile-hero {
     padding: 0.62rem;
+  }
+
+  .prediction-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .prediction-prob-wrap,
+  .prediction-prob-bar {
+    width: 100%;
+    min-width: 0;
   }
 }

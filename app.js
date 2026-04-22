@@ -652,6 +652,179 @@ function computeValueIndex(driver) {
   return per10M.toFixed(2);
 }
 
+async function fetchSeasonDriverStandings(year) {
+  try {
+    const data = await fetchErgast(`/${year}/driverStandings.json`);
+    return data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
+  } catch (error) {
+    return [];
+  }
+}
+
+async function fetchCircuitResultsByYear(year, circuitId) {
+  if (!circuitId) {
+    return [];
+  }
+  try {
+    const data = await fetchErgast(`/${year}/circuits/${circuitId}/results.json?limit=100`);
+    return data?.MRData?.RaceTable?.Races?.[0]?.Results || [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function buildWeightedMap(lists, rowToScore) {
+  const map = new Map();
+  let maxScore = 0;
+
+  lists.forEach(({ rows, weight }) => {
+    if (!rows.length || !weight) {
+      return;
+    }
+    rows.forEach((row) => {
+      const driverId = row?.Driver?.driverId;
+      if (!driverId) {
+        return;
+      }
+      const delta = rowToScore(row) * weight;
+      const next = (map.get(driverId) || 0) + delta;
+      map.set(driverId, next);
+      maxScore = Math.max(maxScore, next);
+    });
+  });
+
+  return { map, maxScore: Math.max(maxScore, 1) };
+}
+
+async function buildRacePrediction(drivers, nextRace, seasonYear) {
+  if (!drivers.length) {
+    return null;
+  }
+
+  const priorYears = [seasonYear - 1, seasonYear - 2, seasonYear - 3];
+  const weightedYears = [1, 0.85, 0.7];
+
+  const [historicalStandings, circuitResults] = await Promise.all([
+    Promise.all(priorYears.map((year) => fetchSeasonDriverStandings(year))),
+    Promise.all(priorYears.map((year) => fetchCircuitResultsByYear(year, nextRace?.Circuit?.circuitId || "")))
+  ]);
+
+  const historyScored = buildWeightedMap(
+    historicalStandings.map((rows, idx) => ({ rows, weight: weightedYears[idx] || 0.6 })),
+    (row) => {
+      const position = toNum(row.position);
+      return Math.max(0, (22 - position) / 21);
+    }
+  );
+
+  const trackScored = buildWeightedMap(
+    circuitResults.map((rows, idx) => ({ rows, weight: weightedYears[idx] || 0.6 })),
+    (row) => {
+      const position = toNum(row.position);
+      return position > 0 ? Math.max(0, (11 - position) / 10) : 0;
+    }
+  );
+
+  const maxCurrentPoints = Math.max(...drivers.map((driver) => toNum(driver.points)), 1);
+  const maxCurrentWins = Math.max(...drivers.map((driver) => toNum(driver.wins)), 1);
+  const formTotals = drivers.map((driver) => {
+    const form = state.f1.recentFormMap[driver.Driver.driverId] || [];
+    return form.slice(-3).reduce((sum, item) => sum + toNum(item), 0);
+  });
+  const maxFormTotal = Math.max(...formTotals, 1);
+
+  const ranked = drivers
+    .map((driver, idx) => {
+      const id = driver.Driver.driverId;
+      const currentPointsNorm = toNum(driver.points) / maxCurrentPoints;
+      const winsNorm = toNum(driver.wins) / maxCurrentWins;
+      const formNorm = formTotals[idx] / maxFormTotal;
+      const historyNorm = (historyScored.map.get(id) || 0) / historyScored.maxScore;
+      const trackNorm = (trackScored.map.get(id) || 0) / trackScored.maxScore;
+
+      const score =
+        currentPointsNorm * 0.42 +
+        winsNorm * 0.16 +
+        formNorm * 0.12 +
+        historyNorm * 0.2 +
+        trackNorm * 0.1;
+
+      return {
+        id,
+        driverName: `${driver.Driver.givenName} ${driver.Driver.familyName}`,
+        code: driver.Driver.code || driver.Driver.familyName.slice(0, 3).toUpperCase(),
+        teamName: driver.Constructors?.[0]?.name || "Unknown Team",
+        score,
+        currentPointsNorm,
+        winsNorm,
+        formNorm,
+        historyNorm,
+        trackNorm
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const pool = ranked.slice(0, 8);
+  const totalScore = Math.max(pool.reduce((sum, row) => sum + row.score, 0), 0.0001);
+  const withProb = pool.map((row) => ({
+    ...row,
+    probability: (row.score / totalScore) * 100
+  }));
+
+  const favorite = withProb[0] || null;
+  const runnerUp = withProb[1] || null;
+
+  return {
+    yearsUsed: priorYears,
+    circuit: nextRace?.Circuit?.circuitName || "Next circuit",
+    generatedAt: new Date().toISOString(),
+    confidenceGap: favorite && runnerUp ? favorite.probability - runnerUp.probability : 0,
+    picks: withProb.slice(0, 3)
+  };
+}
+
+function renderRacePrediction(prediction) {
+  const host = qs("#racePredictionPanel");
+  if (!host) {
+    return;
+  }
+
+  if (!prediction || !prediction.picks.length) {
+    host.innerHTML = "<p class='empty-state'>Prediction engine is waiting for enough race data.</p>";
+    return;
+  }
+
+  const leader = prediction.picks[0];
+  const rows = prediction.picks
+    .map((pick, idx) => {
+      const pct = Math.max(4, Math.round(pick.probability));
+      return `
+        <div class="prediction-row">
+          <div>
+            <strong>P${idx + 1} ${escapeHtml(pick.driverName)} (${escapeHtml(pick.code)})</strong>
+            <p>${escapeHtml(pick.teamName)}</p>
+          </div>
+          <div class="prediction-prob-wrap">
+            <span>${pick.probability.toFixed(1)}%</span>
+            <div class="prediction-prob-bar"><div style="width:${pct}%;"></div></div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  host.innerHTML = `
+    <div class="prediction-lead">
+      <p class="prediction-kicker">Projected Winner</p>
+      <h4>${escapeHtml(leader.driverName)} (${escapeHtml(leader.code)})</h4>
+      <p class="prediction-sub">${escapeHtml(prediction.circuit)} | Confidence gap ${prediction.confidenceGap.toFixed(1)}%</p>
+    </div>
+    <div class="prediction-list">${rows}</div>
+    <p class="inline-meta">Model blend: current-season points and wins, last-3-race form, prior 3 season standings, and prior 3 years of circuit results.</p>
+    <p class="prediction-disclaimer">Machine-oriented prediction only. This forecast is probabilistic and not a guarantee of the race outcome.</p>
+  `;
+}
+
 async function fetchDriverComparison(driverIdA, driverIdB) {
   const [dataA, dataB] = await Promise.all([
     fetchErgast(`/current/drivers/${driverIdA}/results.json?limit=100`),
@@ -1826,6 +1999,13 @@ function renderF1Skeleton() {
     </article>
 
     <article class="glass-card card-span-6 card-entry">
+      <h3 class="card-title">Next Race Predictor <span class="inline-meta">Machine model</span></h3>
+      <div id="racePredictionPanel">
+        <p class="empty-state">Running model on current + historical race data...</p>
+      </div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
       <div id="driverStandings" class="data-list"></div>
       <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
@@ -2029,9 +2209,11 @@ async function renderF1() {
     setupDriverListEvents();
     setupStandingsExpandControl();
 
-    qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
-
     const seasonYear = nextRace?.season ? Number(nextRace.season) : new Date().getUTCFullYear();
+    const prediction = await buildRacePrediction(drivers, nextRace, seasonYear);
+    renderRacePrediction(prediction);
+
+    qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
     if (state.f1.historyYear !== seasonYear || !state.f1.historyData.length) {
       state.f1.historyData = await fetchPreviousYearsChampions(seasonYear, 8);
       state.f1.historyYear = seasonYear;
