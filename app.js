@@ -39,10 +39,6 @@ const state = {
     map: null,
     countdownTicker: null,
     chart: null,
-    infoView: "teams",
-    searchQuery: "",
-    historyData: [],
-    historyYear: 0,
     seasonCalendar: [],
     seasonCompletedRound: 0,
     expandedRound: 0,
@@ -1680,16 +1676,6 @@ async function fetchSeasonSummary(roundsCompleted) {
   };
 }
 
-async function fetchKnowledgeSummary(topic) {
-  const safeTopic = encodeURIComponent(topic || "Formula One");
-  const summary = await fetchJSON(`https://en.wikipedia.org/api/rest_v1/page/summary/${safeTopic}`);
-  return {
-    title: summary?.title || topic,
-    extract: summary?.extract || "No summary available for this query.",
-    url: summary?.content_urls?.desktop?.page || ""
-  };
-}
-
 async function fetchLatestNews() {
   try {
     const payload = await fetchJSON("https://www.reddit.com/r/formula1/new.json?limit=6");
@@ -1702,145 +1688,6 @@ async function fetchLatestNews() {
   } catch (error) {
     return [];
   }
-}
-
-async function fetchPreviousYearsChampions(startYear, count = 8) {
-  const years = [];
-  for (let year = startYear - 1; year >= Math.max(1950, startYear - count); year -= 1) {
-    years.push(year);
-  }
-
-  const champions = await Promise.all(
-    years.map(async (year) => {
-      try {
-        const data = await fetchErgast(`/${year}/driverStandings.json`);
-        const top = data?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings?.[0];
-        if (!top) {
-          return null;
-        }
-        return {
-          year,
-          champion: `${top.Driver.givenName} ${top.Driver.familyName}`,
-          team: top.Constructors?.[0]?.name || "Unknown",
-          points: top.points || "0",
-          wins: top.wins || "0"
-        };
-      } catch (error) {
-        return null;
-      }
-    })
-  );
-
-  return champions.filter(Boolean);
-}
-
-function getFilteredExplorerRows(rows, query) {
-  const q = query.trim().toLowerCase();
-  if (!q) {
-    return rows;
-  }
-  return rows.filter((row) => row.searchText.toLowerCase().includes(q));
-}
-
-function renderInfoExplorer(drivers, constructors) {
-  const panel = qs("#infoPanel");
-  if (!panel) {
-    return;
-  }
-
-  const tabs = qsa("#infoTabs [data-view]");
-  tabs.forEach((tab) => {
-    const active = tab.dataset.view === state.f1.infoView;
-    tab.classList.toggle("active", active);
-  });
-
-  let rows = [];
-  if (state.f1.infoView === "teams") {
-    rows = constructors.map((entry) => ({
-      title: entry.Constructor.name,
-      metaLeft: `${entry.points} pts`,
-      metaRight: `${entry.wins} wins`,
-      searchText: `${entry.Constructor.name} ${entry.points} ${entry.wins}`
-    }));
-  } else if (state.f1.infoView === "drivers") {
-    rows = drivers.map((entry) => ({
-      title: `${entry.Driver.givenName} ${entry.Driver.familyName}`,
-      metaLeft: `${entry.points} pts | ${entry.wins} wins`,
-      metaRight: entry.Constructors?.[0]?.name || "Unknown team",
-      searchText: `${entry.Driver.givenName} ${entry.Driver.familyName} ${entry.Constructors?.[0]?.name || ""}`
-    }));
-  } else {
-    rows = state.f1.historyData.map((item) => ({
-      title: `${item.year} Champion: ${item.champion}`,
-      metaLeft: `${item.team}`,
-      metaRight: `${item.points} pts | ${item.wins} wins`,
-      searchText: `${item.year} ${item.champion} ${item.team}`
-    }));
-  }
-
-  const filtered = getFilteredExplorerRows(rows, state.f1.searchQuery);
-  if (!filtered.length) {
-    panel.innerHTML = "<p class='empty-state'>No matching results.</p>";
-    return;
-  }
-
-  panel.innerHTML = filtered
-    .map(
-      (row) => `
-      <div class="info-item">
-        <strong>${escapeHtml(row.title)}</strong>
-        <div class="info-meta">
-          <span>${escapeHtml(row.metaLeft)}</span>
-          <span>${escapeHtml(row.metaRight)}</span>
-        </div>
-      </div>
-    `
-    )
-    .join("");
-}
-
-function setupInfoExplorerControls(drivers, constructors) {
-  const topSearch = qs("#globalSearchInput");
-  const localSearch = qs("#infoSearchInput");
-  const tabs = qsa("#infoTabs [data-view]");
-  const runTopSearch = debounce(() => {
-    if (!topSearch) {
-      return;
-    }
-    state.f1.searchQuery = topSearch.value;
-    if (localSearch) {
-      localSearch.value = topSearch.value;
-    }
-    renderInfoExplorer(drivers, constructors);
-  }, 300);
-  const runLocalSearch = debounce(() => {
-    if (!localSearch) {
-      return;
-    }
-    state.f1.searchQuery = localSearch.value;
-    if (topSearch) {
-      topSearch.value = localSearch.value;
-    }
-    renderInfoExplorer(drivers, constructors);
-  }, 300);
-
-  if (topSearch) {
-    topSearch.value = state.f1.searchQuery;
-    topSearch.oninput = runTopSearch;
-  }
-
-  if (localSearch) {
-    localSearch.value = state.f1.searchQuery;
-    localSearch.oninput = runLocalSearch;
-  }
-
-  tabs.forEach((tab) => {
-    tab.onclick = () => {
-      triggerMicroFeedback();
-      state.f1.infoView = tab.dataset.view;
-      renderInfoExplorer(drivers, constructors);
-    };
-  });
 }
 
 function renderNewsList(newsItems) {
@@ -1862,43 +1709,6 @@ function renderNewsList(newsItems) {
     `
     )
     .join("");
-}
-
-function setupKnowledgeHub() {
-  const input = qs("#knowledgeInput");
-  const button = qs("#knowledgeSearchBtn");
-  const button2 = qs("#knowledgeSearchBtn2");
-  const output = qs("#knowledgeOutput");
-  const pills = qsa("#knowledgePills [data-topic]");
-  if (!input || !button || !output) {
-    return;
-  }
-
-  const runSearch = async () => {
-    const query = input.value.trim() || "Formula One";
-    output.innerHTML = "<p class='empty-state'>Searching knowledge base...</p>";
-    try {
-      const result = await fetchKnowledgeSummary(query);
-      output.innerHTML = `
-        <h4>${escapeHtml(result.title)}</h4>
-        <p>${escapeHtml(result.extract)}</p>
-        ${result.url ? `<a href="${escapeHtml(result.url)}" target="_blank" rel="noreferrer noopener">Read more</a>` : ""}
-      `;
-    } catch (error) {
-      output.innerHTML = "<p class='empty-state'>No knowledge result for this search.</p>";
-    }
-  };
-
-  button.onclick = runSearch;
-  if (button2) {
-    button2.onclick = runSearch;
-  }
-  pills.forEach((pill) => {
-    pill.onclick = async () => {
-      input.value = pill.dataset.topic || "Formula One";
-      await runSearch();
-    };
-  });
 }
 
 function setupResetButton() {
@@ -2055,13 +1865,10 @@ function renderF1Skeleton() {
 
     <section class="layout-bottom bottom-grid">
       <article class="glass-card card-entry" style="grid-column: span 8;">
-        <h3 class="card-title">Paddock Intelligence Explorer</h3>
-        <div id="infoTabs" class="tab-strip">
-          <button class="small-btn active" data-view="teams">Teams</button>
-          <button class="small-btn" data-view="drivers">Drivers</button>
-          <button class="small-btn" data-view="years">History</button>
+        <h3 class="card-title">Season Standing <span class="inline-meta">Drivers, constructors, and paddock focus</span></h3>
+        <div id="stickyDataGrid" class="sticky-data-grid">
+          <p class="empty-state">Loading standings snapshot...</p>
         </div>
-        <div id="infoPanel" class="info-panel" style="max-height: 200px;"></div>
       </article>
 
       <article class="glass-card card-entry" style="grid-column: span 4;">
@@ -2089,13 +1896,6 @@ function renderF1Skeleton() {
         <h3 class="card-title">Latest News</h3>
         <div id="newsList" class="news-list">
           <p class="empty-state">Loading latest updates...</p>
-        </div>
-      </article>
-
-      <article class="glass-card card-entry sticky-data-grid-card" style="grid-column: span 12;">
-        <h3 class="card-title">Data Grid Footer <span class="inline-meta">Standings and My Paddock focus</span></h3>
-        <div id="stickyDataGrid" class="sticky-data-grid">
-          <p class="empty-state">Loading standings snapshot...</p>
         </div>
       </article>
 
@@ -2239,13 +2039,6 @@ async function renderF1() {
     if (constructorBars) {
       constructorBars.innerHTML = renderConstructorBars(constructors);
     }
-    if (state.f1.historyYear !== seasonYear || !state.f1.historyData.length) {
-      state.f1.historyData = await fetchPreviousYearsChampions(seasonYear, 8);
-      state.f1.historyYear = seasonYear;
-    }
-    setupInfoExplorerControls(drivers, constructors);
-    renderInfoExplorer(drivers, constructors);
-
     const optionsHtml = drivers
       .map((entry) => {
         const id = entry.Driver.driverId;
@@ -2317,7 +2110,6 @@ async function renderF1() {
 
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
 
-    setupKnowledgeHub();
     const newsItems = await fetchLatestNews();
     state.f1.lastNewsItems = newsItems;
     renderBreakingNews(newsItems);
