@@ -3,7 +3,8 @@ const STORAGE_KEYS = {
   favoriteDriver: "paddock:favoriteDriver",
   favoriteTeam: "paddock:favoriteTeam",
   timezone: "paddock:timezone",
-  fxEnabled: "paddock:fxEnabled"
+  fxEnabled: "paddock:fxEnabled",
+  f1CoreCache: "paddock:f1CoreCache"
 };
 
 const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
@@ -569,32 +570,57 @@ function safeTeamColor(index) {
 }
 
 async function fetchF1CoreData() {
-  const [driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData, seasonData] = await Promise.all([
-    fetchErgast("/current/driverStandings.json"),
-    fetchErgast("/current/constructorStandings.json"),
-    fetchErgast("/current/next.json"),
-    fetchErgast("/current/last/results.json"),
-    fetchErgast("/current/last/qualifying.json"),
-    fetchErgast("/current.json?limit=100")
-  ]);
+  const parseCore = (driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData, seasonData) => {
+    const drivers = driverData?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
+    const constructors = constructorData?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
+    const nextRace = nextRaceData?.MRData?.RaceTable?.Races?.[0] || null;
+    const seasonCalendar = seasonData?.MRData?.RaceTable?.Races || [];
+    const lastRaceResults = lastResultsData?.MRData?.RaceTable?.Races?.[0]?.Results || [];
+    const lastQualifying = lastQualifyingData?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
+    const completedRound = toNum(lastResultsData?.MRData?.RaceTable?.Races?.[0]?.round);
 
-  const drivers = driverData?.MRData?.StandingsTable?.StandingsLists?.[0]?.DriverStandings || [];
-  const constructors = constructorData?.MRData?.StandingsTable?.StandingsLists?.[0]?.ConstructorStandings || [];
-  const nextRace = nextRaceData?.MRData?.RaceTable?.Races?.[0] || null;
-  const seasonCalendar = seasonData?.MRData?.RaceTable?.Races || [];
-  const lastRaceResults = lastResultsData?.MRData?.RaceTable?.Races?.[0]?.Results || [];
-  const lastQualifying = lastQualifyingData?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
-  const completedRound = toNum(lastResultsData?.MRData?.RaceTable?.Races?.[0]?.round);
-
-  return {
-    drivers,
-    constructors,
-    nextRace,
-    seasonCalendar,
-    completedRound,
-    lastRaceResults,
-    lastQualifying
+    return {
+      drivers,
+      constructors,
+      nextRace,
+      seasonCalendar,
+      completedRound,
+      lastRaceResults,
+      lastQualifying
+    };
   };
+
+  try {
+    const [driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData, seasonData] = await Promise.all([
+      fetchErgast("/current/driverStandings.json"),
+      fetchErgast("/current/constructorStandings.json"),
+      fetchErgast("/current/next.json"),
+      fetchErgast("/current/last/results.json"),
+      fetchErgast("/current/last/qualifying.json"),
+      fetchErgast("/current.json?limit=100")
+    ]);
+
+    const core = parseCore(driverData, constructorData, nextRaceData, lastResultsData, lastQualifyingData, seasonData);
+    if (!core.drivers.length || !core.constructors.length) {
+      throw new Error("Core standings response is empty");
+    }
+
+    localStorage.setItem(STORAGE_KEYS.f1CoreCache, JSON.stringify(core));
+    return core;
+  } catch (error) {
+    const cachedRaw = localStorage.getItem(STORAGE_KEYS.f1CoreCache);
+    if (cachedRaw) {
+      try {
+        const cached = JSON.parse(cachedRaw);
+        if (Array.isArray(cached?.drivers) && cached.drivers.length) {
+          return { ...cached, fromCache: true };
+        }
+      } catch (cacheError) {
+        // Ignore bad cache and fall through to original error.
+      }
+    }
+    throw error;
+  }
 }
 
 async function fetchDriverTrajectory(driverId) {
@@ -2303,6 +2329,8 @@ async function renderF1() {
     renderNewsList(newsItems);
     renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
+    console.error("renderF1 failed", error);
+    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown error";
     updateLiveHUD({
       raceName: "Data feed issue",
       localTime: "Unavailable",
@@ -2317,6 +2345,7 @@ async function renderF1() {
         <p class="empty-state">
           Live APIs could not be reached right now. The architecture is ready; verify internet access or endpoint availability and refresh.
         </p>
+        <p class="inline-meta">Debug: ${reason}</p>
       </article>
     `;
   } finally {
