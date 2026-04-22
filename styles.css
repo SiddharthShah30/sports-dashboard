@@ -62,7 +62,7 @@ body {
 
 .app-header,
 .dashboard-shell {
-  width: min(1380px, 94vw);
+  width: min(1380px, calc(100vw - 4rem));
   margin: 0 auto;
 }
 
@@ -194,15 +194,18 @@ body.is-loading .loading-skeleton {
 }
 
 .dashboard-shell {
-  padding: 1.4rem 0 3.2rem;
+  padding: 2rem 0 3.2rem;
 }
 
 .live-hud {
   display: grid;
-  grid-template-columns: 2fr 1.1fr 1.1fr 1fr 1.6fr;
-  gap: 0.9rem;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr 1.5fr;
+  gap: 2rem;
   align-items: center;
-  margin-bottom: 1.3rem;
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+  background: rgba(var(--accent-rgb), 0.05);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
 }
 
 .hud-item {
@@ -403,6 +406,7 @@ body.is-loading .loading-skeleton {
 
 .dashboard-grid.f1-layout {
   grid-template-columns: 8fr 4fr;
+  align-items: start;
 }
 
 .layout-main,
@@ -432,11 +436,13 @@ body.is-loading .loading-skeleton {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0 0 0.9rem;
+  margin: 0 0 1.2rem;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: 1.06rem;
+  font-size: 1.2rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .inline-meta {
@@ -625,11 +631,14 @@ body.is-loading .loading-skeleton {
 
 .track-map {
   width: 100%;
-  height: 160px;
+  height: 200px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: #111524;
+  background: rgba(0, 0, 0, 0.2);
   padding: 0.62rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .track-map.real-map {
@@ -652,6 +661,10 @@ body.is-loading .loading-skeleton {
 .race-center-stack {
   display: grid;
   gap: 0.72rem;
+}
+
+.layout-side .glass-card {
+  margin-bottom: 0;
 }
 
 .telemetry-feed {
@@ -1542,7 +1555,7 @@ body[data-module="nba"] .live-hud {
 @media (max-width: 600px) {
   .app-header,
   .dashboard-shell {
-    width: 94vw;
+    width: calc(100vw - 2rem);
   }
 
   .tab-btn,

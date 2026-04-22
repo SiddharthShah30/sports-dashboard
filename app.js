@@ -1960,14 +1960,11 @@ function renderF1Skeleton() {
   grid.innerHTML = `
     <section class="layout-main">
       <article class="glass-card card-entry active-live-center">
-        <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+        <h3 class="card-title">Live Race Intel <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
         <div class="live-state-wrap">
           <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
           <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
         </div>
-        <p><strong>Day:</strong> <span id="raceDay">Loading...</span></p>
-        <p><strong>Date:</strong> <span id="raceDate">Loading...</span></p>
-        <p><strong>Time:</strong> <span id="raceTime">Loading...</span></p>
         <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
         <div id="telemetryFeed" class="telemetry-feed">
           <p class="empty-state">Loading telemetry feed...</p>
@@ -1981,14 +1978,14 @@ function renderF1Skeleton() {
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Race Intel <span class="inline-meta" id="gridLaunchHint">Loading latest starting grid...</span></h3>
+        <h3 class="card-title">Track & Starting Grid</h3>
         <div class="race-center-stack two-up">
           <div>
-            <p class="inline-meta" id="trackLayoutHint">Track layout for next Grand Prix</p>
+            <p class="inline-meta" id="trackLayoutHint">Circuit Geometry</p>
             <div id="raceTrackLayout"></div>
           </div>
           <div>
-            <p class="inline-meta">Starting Grid</p>
+            <p class="inline-meta">Starting Positions</p>
             <div id="latestGridLayout"></div>
           </div>
         </div>
@@ -1999,14 +1996,14 @@ function renderF1Skeleton() {
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Next Race Predictor <span class="inline-meta">Machine model</span></h3>
+        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
         <div id="racePredictionPanel">
           <p class="empty-state">Running model on current + historical race data...</p>
         </div>
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Season Calendar <span class="inline-meta">Tap race card for weekend schedule</span></h3>
+        <h3 class="card-title">Season Roadmap</h3>
         <div id="seasonCalendarStrip" class="season-calendar-strip">
           <p class="empty-state">Loading season roadmap...</p>
         </div>
@@ -2016,98 +2013,83 @@ function renderF1Skeleton() {
 
     <aside class="layout-side">
       <article class="glass-card card-entry">
-        <h3 class="card-title">Driver Profile Card</h3>
+        <h3 class="card-title">Driver Profile</h3>
         <div id="profileStats" class="stats-row"></div>
-        <div style="height: 190px; margin-top: 0.8rem;">
+        <div style="height: 180px; margin-top: 1rem;">
           <canvas id="trajectoryChart"></canvas>
         </div>
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
+        <h3 class="card-title">Current Standings</h3>
         <div id="driverStandings" class="data-list"></div>
         <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Constructor Battle <span class="inline-meta">Points gap visualizer</span></h3>
-        <div id="constructorBars"></div>
-      </article>
-
-      <article class="glass-card card-entry">
-        <h3 class="card-title">Head-to-Head Tool</h3>
-        <div class="split" style="margin-bottom:0.75rem;">
-          <select id="driverA" class="select-input"></select>
-          <select id="driverB" class="select-input"></select>
-        </div>
-        <button id="compareBtn" class="small-btn">Compare Qualifying Pace and Race Finishes</button>
-        <div id="comparisonResult" style="margin-top:0.75rem;"></div>
-      </article>
-
-      <article class="glass-card card-entry">
-        <h3 class="card-title">F1 Information Explorer</h3>
-        <div id="infoTabs" class="tab-strip">
-          <button class="small-btn active" data-view="teams">Teams</button>
-          <button class="small-btn" data-view="drivers">Drivers</button>
-          <button class="small-btn" data-view="years">Previous Years</button>
-        </div>
-        <div class="split" style="margin-bottom:0.6rem;">
-          <input id="infoSearchInput" class="select-input" placeholder="Filter teams, drivers, champions" />
-          <button id="knowledgeSearchBtn" class="small-btn">Search Wiki</button>
-        </div>
-        <div class="topic-pills" id="knowledgePills">
-          <button class="small-btn" data-topic="Scuderia Ferrari">Ferrari</button>
-          <button class="small-btn" data-topic="Toto Wolff">Team Principal</button>
-          <button class="small-btn" data-topic="Ayrton Senna">Legend</button>
-          <button class="small-btn" data-topic="Formula One World Drivers' Championship">Championship History</button>
-        </div>
-        <div id="infoPanel" class="info-panel">
-          <p class="empty-state">Loading information...</p>
-        </div>
-        <div class="split" style="margin:0.7rem 0 0.6rem;">
-          <input id="knowledgeInput" class="select-input" placeholder="Read about any F1 subject" />
-          <button id="knowledgeSearchBtn2" class="small-btn">Open Article</button>
-        </div>
-        <div id="knowledgeOutput" class="knowledge-output">
-          <p class="empty-state">Search any F1 topic to read current and historical context.</p>
+        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
+        <div id="racePredictionPanel">
+          <p class="empty-state">Calculating probabilities...</p>
         </div>
       </article>
     </aside>
 
-    <article class="glass-card card-entry layout-bottom">
-      <h3 class="card-title">Formula 1 Live Center <span class="inline-meta">Breaking updates</span></h3>
-      <div class="breaking-ticker-wrap">
-        <span class="live-dot"></span>
-        <div id="breakingTicker" class="breaking-ticker">Loading headlines...</div>
-      </div>
-      <div id="headlineRail" class="headline-rail">
-        <p class="empty-state">Loading feature cards...</p>
-      </div>
-    </article>
-
-    <article class="glass-card card-entry layout-bottom">
-      <h3 class="card-title">Latest News</h3>
-      <div id="newsList" class="news-list">
-        <p class="empty-state">Loading latest updates...</p>
-      </div>
-    </article>
-
-    <article class="glass-card card-entry sticky-data-grid-card layout-bottom">
-      <h3 class="card-title">Data Grid Footer <span class="inline-meta">Standings and My Paddock focus</span></h3>
-      <div id="stickyDataGrid" class="sticky-data-grid">
-        <p class="empty-state">Loading standings snapshot...</p>
-      </div>
-    </article>
-
-    <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
-      <div class="map-modal-card glass-card">
-        <div class="map-modal-head">
-          <h3 class="card-title" style="margin:0;">Circuit Location Map</h3>
-          <button id="closeCircuitMapModal" class="small-btn">Close</button>
+    <section class="layout-bottom dashboard-grid bottom-grid" style="grid-column: 1/-1; gap: 1.5rem;">
+      <article class="glass-card card-entry" style="grid-column: span 8;">
+        <h3 class="card-title">Paddock Intelligence Explorer</h3>
+        <div id="infoTabs" class="tab-strip">
+          <button class="small-btn active" data-view="teams">Teams</button>
+          <button class="small-btn" data-view="drivers">Drivers</button>
+          <button class="small-btn" data-view="years">History</button>
         </div>
-        <div id="raceMapModal"></div>
+        <div id="infoPanel" class="info-panel" style="max-height: 200px;"></div>
+      </article>
+
+      <article class="glass-card card-entry" style="grid-column: span 4;">
+        <h3 class="card-title">Head-to-Head</h3>
+        <div class="split" style="margin-bottom:0.5rem;">
+          <select id="driverA" class="select-input"></select>
+          <select id="driverB" class="select-input"></select>
+        </div>
+        <button id="compareBtn" class="small-btn" style="width:100%">Compare Pace</button>
+        <div id="comparisonResult"></div>
+      </article>
+
+      <article class="glass-card card-entry" style="grid-column: span 12;">
+        <h3 class="card-title">Formula 1 Live Center <span class="inline-meta">Breaking updates</span></h3>
+        <div class="breaking-ticker-wrap">
+          <span class="live-dot"></span>
+          <div id="breakingTicker" class="breaking-ticker">Loading headlines...</div>
+        </div>
+        <div id="headlineRail" class="headline-rail">
+          <p class="empty-state">Loading feature cards...</p>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry" style="grid-column: span 12;">
+        <h3 class="card-title">Latest News</h3>
+        <div id="newsList" class="news-list">
+          <p class="empty-state">Loading latest updates...</p>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry sticky-data-grid-card" style="grid-column: span 12;">
+        <h3 class="card-title">Data Grid Footer <span class="inline-meta">Standings and My Paddock focus</span></h3>
+        <div id="stickyDataGrid" class="sticky-data-grid">
+          <p class="empty-state">Loading standings snapshot...</p>
+        </div>
+      </article>
+
+      <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
+        <div class="map-modal-card glass-card">
+          <div class="map-modal-head">
+            <h3 class="card-title" style="margin:0;">Circuit Location Map</h3>
+            <button id="closeCircuitMapModal" class="small-btn">Close</button>
+          </div>
+          <div id="raceMapModal"></div>
+        </div>
       </div>
-    </div>
+    </section>
   `;
 }
 
