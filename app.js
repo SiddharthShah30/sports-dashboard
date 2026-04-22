@@ -2146,12 +2146,24 @@ async function renderF1() {
     const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
     const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timezone, trackTimeZone);
     setupTimezoneAndFxControls();
-    qs("#raceMeta").textContent = nextRace
-      ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
-      : "No race scheduled";
-    qs("#raceDay").textContent = raceDateParts.weekday;
-    qs("#raceDate").textContent = raceTimeMode.dateLabel;
-    qs("#raceTime").textContent = `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
+    const raceMetaEl = qs("#raceMeta");
+    if (raceMetaEl) {
+      raceMetaEl.textContent = nextRace
+        ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
+        : "No race scheduled";
+    }
+    const raceDayEl = qs("#raceDay");
+    if (raceDayEl) {
+      raceDayEl.textContent = raceDateParts.weekday;
+    }
+    const raceDateEl = qs("#raceDate");
+    if (raceDateEl) {
+      raceDateEl.textContent = raceTimeMode.dateLabel;
+    }
+    const raceTimeEl = qs("#raceTime");
+    if (raceTimeEl) {
+      raceTimeEl.textContent = `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
+    }
 
     const racePhase = getRacePhase(nextRace);
     const raceStateBadge = qs("#raceStateBadge");
