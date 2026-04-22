@@ -45,9 +45,46 @@ const state = {
     seasonCalendar: [],
     seasonCompletedRound: 0,
     expandedRound: 0,
-    lastNewsItems: []
+    lastNewsItems: [],
+    recentFormMap: {},
+    recentFormRound: 0,
+    quizIndex: 0,
+    quizScore: 0
   }
 };
+
+const TEAM_BUDGET_MILLIONS = {
+  Ferrari: 450,
+  Mercedes: 440,
+  McLaren: 360,
+  "Red Bull Racing": 455,
+  "Aston Martin": 325,
+  Alpine: 300,
+  Williams: 220,
+  Audi: 280,
+  Cadillac: 260,
+  "Racing Bulls": 230,
+  "Haas F1 Team": 210,
+  Sauber: 240
+};
+
+const PADDOCK_QUIZ = [
+  {
+    question: "Which driver has the most F1 World Championships?",
+    options: ["Ayrton Senna", "Lewis Hamilton", "Sebastian Vettel"],
+    correct: 1
+  },
+  {
+    question: "Monaco Grand Prix is usually held on which day?",
+    options: ["Saturday", "Sunday", "Friday"],
+    correct: 1
+  },
+  {
+    question: "What does DRS stand for?",
+    options: ["Drag Reduction System", "Downforce Recovery Setup", "Dynamic Racing Strategy"],
+    correct: 0
+  }
+];
 
 const TEAM_ACCENTS = {
   Ferrari: "#ed1131",
@@ -156,6 +193,14 @@ function toNum(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function debounce(fn, delay = 300) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
 function triggerMicroFeedback() {
   if (!state.fxEnabled) {
     return;
@@ -163,6 +208,13 @@ function triggerMicroFeedback() {
   if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
     navigator.vibrate(12);
   }
+}
+
+function runThemeShift() {
+  document.body.classList.remove("theme-shift");
+  void document.body.offsetWidth;
+  document.body.classList.add("theme-shift");
+  setTimeout(() => document.body.classList.remove("theme-shift"), 360);
 }
 
 function getTrackTimeZone(race) {
@@ -323,19 +375,37 @@ function renderQuickIntelStrip({
 }) {
   const quickCountdown = qs("#quickCountdown");
   const quickRaceName = qs("#quickRaceName");
-  const quickRaceDate = qs("#quickRaceDate");
   const quickRaceTime = qs("#quickRaceTime");
+  const quickRaceScheduleDate = qs("#quickRaceScheduleDate");
+  const quickSessionFp1 = qs("#quickSessionFp1");
+  const quickSessionFp2 = qs("#quickSessionFp2");
+  const quickSessionQuali = qs("#quickSessionQuali");
+  const quickSessionRace = qs("#quickSessionRace");
   const quickLeader = qs("#quickLeader");
   const quickGap = qs("#quickGap");
   const seasonBar = qs("#quickSeasonProgress");
-  if (!quickCountdown || !quickRaceName || !quickRaceDate || !quickRaceTime || !quickLeader || !quickGap || !seasonBar) {
+  if (!quickCountdown || !quickRaceName || !quickRaceTime || !quickLeader || !quickGap || !seasonBar) {
     return;
   }
 
   quickCountdown.textContent = countdown;
   quickRaceName.textContent = raceName;
-  quickRaceDate.textContent = raceDate;
   quickRaceTime.textContent = raceTime;
+  if (quickRaceScheduleDate) {
+    quickRaceScheduleDate.textContent = raceDate;
+  }
+  if (quickSessionFp1) {
+    quickSessionFp1.textContent = `${raceDate} ${raceTime}`;
+  }
+  if (quickSessionFp2) {
+    quickSessionFp2.textContent = `${raceDate} ${raceTime}`;
+  }
+  if (quickSessionQuali) {
+    quickSessionQuali.textContent = `${raceDate} ${raceTime}`;
+  }
+  if (quickSessionRace) {
+    quickSessionRace.textContent = `${raceDate} ${raceTime}`;
+  }
   quickLeader.textContent = leader;
   quickGap.textContent = gap;
   const pct = seasonTotal > 0 ? Math.min(100, Math.max(0, (seasonCompleted / seasonTotal) * 100)) : 0;
@@ -368,6 +438,10 @@ function clearF1Intervals() {
     state.f1.countdownTicker = null;
   }
   destroyRaceMap();
+}
+
+function setLoadingState(active) {
+  document.body.classList.toggle("is-loading", Boolean(active));
 }
 
 function formatCountdown(targetIso) {
@@ -432,6 +506,7 @@ function getRacePhase(nextRace) {
 
 function applyTeamAccentTheme(teamName) {
   const accent = TEAM_ACCENTS[teamName] || "#E10600";
+  const currentAccent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().toLowerCase();
   const normalized = accent.replace("#", "");
   const full = normalized.length === 3
     ? normalized.split("").map((char) => `${char}${char}`).join("")
@@ -442,6 +517,9 @@ function applyTeamAccentTheme(teamName) {
   document.documentElement.style.setProperty("--accent", accent);
   if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
     document.documentElement.style.setProperty("--accent-rgb", `${r}, ${g}, ${b}`);
+  }
+  if (currentAccent !== accent.toLowerCase()) {
+    runThemeShift();
   }
 }
 
@@ -519,6 +597,61 @@ async function fetchDriverTrajectory(driverId) {
   return { labels, values };
 }
 
+async function fetchRecentDriverForm() {
+  try {
+    const data = await fetchErgast("/current/results.json?limit=100");
+    const races = data?.MRData?.RaceTable?.Races || [];
+    const sorted = [...races].sort((a, b) => toNum(b.round) - toNum(a.round)).slice(0, 3);
+    const byDriver = {};
+
+    sorted.reverse().forEach((race) => {
+      (race.Results || []).forEach((result) => {
+        const driverId = result?.Driver?.driverId;
+        if (!driverId) {
+          return;
+        }
+        if (!byDriver[driverId]) {
+          byDriver[driverId] = [];
+        }
+        byDriver[driverId].push(toNum(result.points));
+      });
+    });
+
+    return byDriver;
+  } catch (error) {
+    return {};
+  }
+}
+
+function renderSparkline(values) {
+  const points = (values || []).slice(-3);
+  if (points.length < 2) {
+    return "";
+  }
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points, 0);
+  const range = Math.max(max - min, 1);
+  const coords = points.map((val, idx) => {
+    const x = 4 + idx * 18;
+    const y = 20 - ((val - min) / range) * 16;
+    return `${x},${y.toFixed(1)}`;
+  }).join(" ");
+
+  return `
+    <svg class="sparkline" viewBox="0 0 44 24" aria-label="Recent form sparkline">
+      <polyline points="${coords}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    </svg>
+  `;
+}
+
+function computeValueIndex(driver) {
+  const teamName = driver?.Constructors?.[0]?.name || "";
+  const budget = TEAM_BUDGET_MILLIONS[teamName] || 300;
+  const points = toNum(driver?.points);
+  const per10M = (points / budget) * 10;
+  return per10M.toFixed(2);
+}
+
 async function fetchDriverComparison(driverIdA, driverIdB) {
   const [dataA, dataB] = await Promise.all([
     fetchErgast(`/current/drivers/${driverIdA}/results.json?limit=100`),
@@ -586,6 +719,8 @@ function renderStandingsList(drivers) {
       const driverName = `${driver.Driver.givenName} ${driver.Driver.familyName}`;
       const avatarUrl = getAvatarUrl(media.headshotUrl, driverName);
       const fallbackAvatar = getAvatarUrl("", driverName);
+      const form = state.f1.recentFormMap[id] || [];
+      const valueIndex = computeValueIndex(driver);
 
       return `
         <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
@@ -593,7 +728,8 @@ function renderStandingsList(drivers) {
             <img class="driver-avatar" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(fallbackAvatar)}'" />
             <div class="driver-copy">
               <strong>#${driver.position} ${driverName} (${code})</strong>
-              <span>${team} | ${points} pts</span>
+              <span>${team} | ${points} pts | VI ${valueIndex}</span>
+              ${renderSparkline(form)}
             </div>
           </div>
         </button>
@@ -630,13 +766,30 @@ function renderConstructorBars(constructors) {
 
 function renderTrackMap(circuitId) {
   const path = getTrackPathByCircuit(circuitId);
+  const dots = Array.from({ length: 20 }, (_, idx) => {
+    const angle = (idx / 20) * Math.PI * 2;
+    const cx = 140 + Math.cos(angle) * 92;
+    const cy = 80 + Math.sin(angle) * 48;
+    return `<circle class="grid-dot" data-grid-dot="${idx + 1}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3"></circle>`;
+  }).join("");
   return `
     <div class="track-map card-entry">
       <svg viewBox="0 0 280 160" role="img" aria-label="Circuit mini map">
         <path class="track-line" d="${path}"></path>
+        ${dots}
       </svg>
     </div>
   `;
+}
+
+function highlightGridPosition(position) {
+  const pos = toNum(position);
+  if (!pos) {
+    return;
+  }
+  qsa("[data-grid-dot]").forEach((dot) => {
+    dot.classList.toggle("active", toNum(dot.getAttribute("data-grid-dot")) === pos);
+  });
 }
 
 function renderStartingGridLayout(qualifyingRows, resultRows) {
@@ -672,12 +825,12 @@ function renderStartingGridLayout(qualifyingRows, resultRows) {
 
     rows.push(`
       <div class="grid-row ${laneIndex % 2 === 0 ? "lane-even" : "lane-odd"}">
-        <button class="grid-slot lane-left" style="--team-color:${escapeHtml(leftColor)}" data-open-map="true" aria-label="Open circuit map from grid row ${pos}">
+        <button class="grid-slot lane-left" style="--team-color:${escapeHtml(leftColor)}" data-open-map="true" data-grid-pos="${pos}" aria-label="Open circuit map from grid row ${pos}">
           <span class="grid-pos">P${pos}</span>
           <span class="grid-code">${escapeHtml(leftCode)}</span>
           <span class="grid-name">${escapeHtml(leftName)}</span>
         </button>
-        <button class="grid-slot lane-right" style="--team-color:${escapeHtml(rightColor)}" data-open-map="true" aria-label="Open circuit map from grid row ${pos + 1}">
+        <button class="grid-slot lane-right" style="--team-color:${escapeHtml(rightColor)}" data-open-map="true" data-grid-pos="${pos + 1}" aria-label="Open circuit map from grid row ${pos + 1}">
           <span class="grid-pos">P${pos + 1}</span>
           <span class="grid-code">${escapeHtml(rightCode)}</span>
           <span class="grid-name">${escapeHtml(rightName)}</span>
@@ -751,7 +904,10 @@ function setupGridMapLauncher(lat, lon, circuitName) {
   };
 
   gridContainer.querySelectorAll("[data-open-map='true']").forEach((slot) => {
-    slot.addEventListener("click", openModal);
+    slot.addEventListener("click", () => {
+      highlightGridPosition(slot.getAttribute("data-grid-pos"));
+      openModal();
+    });
   });
 
   closeBtn.addEventListener("click", () => {
@@ -1072,6 +1228,71 @@ function setupUpcomingRaceActions(nextRace) {
   };
 }
 
+function setupQuickScheduleToggle() {
+  const toggle = qs("#fullScheduleToggle");
+  const details = qs("#quickScheduleDetails");
+  if (!toggle || !details) {
+    return;
+  }
+  toggle.onclick = () => {
+    const isHidden = details.classList.toggle("hidden");
+    toggle.textContent = isHidden ? "Full Schedule" : "Hide Schedule";
+    triggerMicroFeedback();
+  };
+}
+
+function setupStandingsExpandControl() {
+  const standings = qs("#driverStandings");
+  const button = qs("#standingsExpandBtn");
+  if (!standings || !button) {
+    return;
+  }
+
+  button.onclick = () => {
+    const expanded = standings.classList.toggle("expanded");
+    button.textContent = expanded ? "Show Less" : "Show More";
+    triggerMicroFeedback();
+  };
+}
+
+function renderPaddockQuiz(phaseLabel) {
+  const wrap = qs("#paddockQuiz");
+  const questionEl = qs("#quizQuestion");
+  const optionsEl = qs("#quizOptions");
+  const scoreEl = qs("#quizScore");
+  if (!wrap || !questionEl || !optionsEl || !scoreEl) {
+    return;
+  }
+
+  if (phaseLabel !== "PRE-RACE") {
+    wrap.classList.add("hidden");
+    return;
+  }
+
+  wrap.classList.remove("hidden");
+  const current = PADDOCK_QUIZ[state.f1.quizIndex % PADDOCK_QUIZ.length];
+  questionEl.textContent = current.question;
+  optionsEl.innerHTML = current.options
+    .map((option, idx) => `<button class="small-btn" data-quiz-option="${idx}" type="button">${escapeHtml(option)}</button>`)
+    .join("");
+
+  optionsEl.querySelectorAll("[data-quiz-option]").forEach((button) => {
+    button.onclick = () => {
+      const selected = toNum(button.getAttribute("data-quiz-option"));
+      const correct = selected === current.correct;
+      if (correct) {
+        state.f1.quizScore += 1;
+      }
+      state.f1.quizIndex += 1;
+      scoreEl.textContent = `Score: ${state.f1.quizScore}/${state.f1.quizIndex}`;
+      triggerMicroFeedback();
+      renderPaddockQuiz("PRE-RACE");
+    };
+  });
+
+  scoreEl.textContent = `Score: ${state.f1.quizScore}/${state.f1.quizIndex}`;
+}
+
 function setupCountdown(raceDateIso) {
   const countdownEl = qs("#countdownValue");
   if (!countdownEl || !raceDateIso) {
@@ -1124,15 +1345,18 @@ function setupCountdown(raceDateIso) {
         badge.textContent = "PRE-RACE";
         badge.className = "race-state-badge pre-race";
         detail.textContent = "Countdown active";
+        renderPaddockQuiz("PRE-RACE");
       } else if (now >= raceStart && now <= raceEnd) {
         const elapsedMin = Math.max(0, Math.floor((now - raceStart) / 60000));
         badge.textContent = "LIVE";
         badge.className = "race-state-badge live";
         detail.textContent = `Race in progress • T+${elapsedMin} min`;
+        renderPaddockQuiz("LIVE");
       } else {
         badge.textContent = "FINISHED";
         badge.className = "race-state-badge finished";
         detail.textContent = "Awaiting post-race updates";
+        renderPaddockQuiz("FINISHED");
       }
     }
   };
@@ -1369,27 +1593,35 @@ function setupInfoExplorerControls(drivers, constructors) {
   const topSearch = qs("#globalSearchInput");
   const localSearch = qs("#infoSearchInput");
   const tabs = qsa("#infoTabs [data-view]");
+  const runTopSearch = debounce(() => {
+    if (!topSearch) {
+      return;
+    }
+    state.f1.searchQuery = topSearch.value;
+    if (localSearch) {
+      localSearch.value = topSearch.value;
+    }
+    renderInfoExplorer(drivers, constructors);
+  }, 300);
+  const runLocalSearch = debounce(() => {
+    if (!localSearch) {
+      return;
+    }
+    state.f1.searchQuery = localSearch.value;
+    if (topSearch) {
+      topSearch.value = localSearch.value;
+    }
+    renderInfoExplorer(drivers, constructors);
+  }, 300);
 
   if (topSearch) {
     topSearch.value = state.f1.searchQuery;
-    topSearch.oninput = () => {
-      state.f1.searchQuery = topSearch.value;
-      if (localSearch) {
-        localSearch.value = topSearch.value;
-      }
-      renderInfoExplorer(drivers, constructors);
-    };
+    topSearch.oninput = runTopSearch;
   }
 
   if (localSearch) {
     localSearch.value = state.f1.searchQuery;
-    localSearch.oninput = () => {
-      state.f1.searchQuery = localSearch.value;
-      if (topSearch) {
-        topSearch.value = localSearch.value;
-      }
-      renderInfoExplorer(drivers, constructors);
-    };
+    localSearch.oninput = runLocalSearch;
   }
 
   tabs.forEach((tab) => {
@@ -1495,6 +1727,9 @@ function upsertTrajectoryChart(labels, values) {
     state.f1.chart.destroy();
   }
 
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#E10600";
+  const accentRgb = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim() || "225, 6, 0";
+
   state.f1.chart = new Chart(chartEl, {
     type: "line",
     data: {
@@ -1503,8 +1738,8 @@ function upsertTrajectoryChart(labels, values) {
         {
           label: "Cumulative Points",
           data: values,
-          borderColor: "#1459d9",
-          backgroundColor: "rgba(20, 89, 217, 0.17)",
+          borderColor: accent,
+          backgroundColor: `rgba(${accentRgb}, 0.18)`,
           borderWidth: 2,
           tension: 0.28,
           fill: true,
@@ -1557,7 +1792,7 @@ function renderF1Skeleton() {
       <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
     </article>
 
-    <article class="glass-card card-span-6 card-entry">
+    <article class="glass-card card-span-6 card-entry active-live-center">
       <h3 class="card-title">Live Race Center <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
       <div class="live-state-wrap">
         <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
@@ -1571,6 +1806,12 @@ function renderF1Skeleton() {
       <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
       <div id="telemetryFeed" class="telemetry-feed">
         <p class="empty-state">Loading telemetry feed...</p>
+      </div>
+      <div id="paddockQuiz" class="paddock-quiz hidden">
+        <h4>Pre-Race Quiz</h4>
+        <p id="quizQuestion">Loading question...</p>
+        <div id="quizOptions" class="quiz-options"></div>
+        <p id="quizScore" class="inline-meta">Score: 0/0</p>
       </div>
       <div class="race-center-stack">
         <div>
@@ -1587,6 +1828,7 @@ function renderF1Skeleton() {
     <article class="glass-card card-span-6 card-entry">
       <h3 class="card-title">Driver Standings <span class="inline-meta">Tap to expand</span></h3>
       <div id="driverStandings" class="data-list"></div>
+      <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
     </article>
 
     <article class="glass-card card-span-6 card-entry">
@@ -1670,6 +1912,7 @@ function renderF1Skeleton() {
 async function renderF1() {
   renderF1Skeleton();
   clearF1Intervals();
+  setLoadingState(true);
 
   renderQuickIntelStrip({
     countdown: "Loading...",
@@ -1702,6 +1945,10 @@ async function renderF1() {
       fetchOpenF1DriverMedia(),
       fetchTeamLogoMap(constructors)
     ]);
+    if (state.f1.recentFormRound !== completedRound || !Object.keys(state.f1.recentFormMap).length) {
+      state.f1.recentFormMap = await fetchRecentDriverForm();
+      state.f1.recentFormRound = completedRound;
+    }
     state.f1.driverMediaMap = driverMediaMap;
     state.f1.teamLogoMap = teamLogoMap;
 
@@ -1733,6 +1980,7 @@ async function renderF1() {
     if (raceStateDetail) {
       raceStateDetail.textContent = racePhase.detail;
     }
+    renderPaddockQuiz(racePhase.label);
 
     const leader = drivers[0];
     const second = drivers[1];
@@ -1769,6 +2017,7 @@ async function renderF1() {
       quickTrackLayout.innerHTML = renderTrackMap(circuitId);
     }
     setupUpcomingRaceActions(nextRace);
+    setupQuickScheduleToggle();
 
     renderSeasonCalendar(seasonCalendar);
     setupSeasonCalendarEvents(seasonCalendar);
@@ -1778,6 +2027,7 @@ async function renderF1() {
 
     qs("#driverStandings").innerHTML = renderStandingsList(drivers);
     setupDriverListEvents();
+    setupStandingsExpandControl();
 
     qs("#constructorBars").innerHTML = renderConstructorBars(constructors);
 
@@ -1884,6 +2134,8 @@ async function renderF1() {
         </p>
       </article>
     `;
+  } finally {
+    setLoadingState(false);
   }
 }
 

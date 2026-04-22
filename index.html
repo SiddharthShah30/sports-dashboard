@@ -88,16 +88,16 @@
     <section class="quick-intel-row" id="quickIntelRow">
       <article class="glass-card quick-card card-entry live-hub-card">
         <p class="quick-label">Live Center</p>
-        <p class="quick-value" id="quickLeader">Loading...</p>
-        <p class="quick-sub" id="quickGap">Loading season rounds</p>
+        <p class="quick-value loading-skeleton" id="quickLeader">Loading...</p>
+        <p class="quick-sub loading-skeleton" id="quickGap">Loading season rounds</p>
         <div class="live-hub-grid">
           <div class="live-hub-cell">
             <span>Next Race</span>
-            <strong id="quickRaceName">Fetching next Grand Prix</strong>
+            <strong id="quickRaceName" class="loading-skeleton">Fetching next Grand Prix</strong>
           </div>
           <div class="live-hub-cell">
             <span>Local Start</span>
-            <strong id="quickRaceTime">--:--</strong>
+            <strong id="quickRaceTime" class="loading-skeleton">--:--</strong>
           </div>
           <div class="live-hub-cell wide">
             <span>Season Progress</span>
@@ -109,7 +109,7 @@
       </article>
       <article class="glass-card quick-card card-entry upcoming-hub-card">
         <p class="quick-label">Upcoming Race</p>
-        <p class="quick-sub" id="quickRaceDate">Loading...</p>
+         <button id="fullScheduleToggle" class="small-btn schedule-toggle" type="button">Full Schedule</button>
         <div class="startup-timer" id="startupTimer">
           <div class="timer-cell"><span id="timerDays">00</span><small>D</small></div>
           <div class="timer-sep">:</div>
@@ -119,7 +119,14 @@
           <div class="timer-sep">:</div>
           <div class="timer-cell"><span id="timerSeconds">00</span><small>S</small></div>
         </div>
-        <p class="quick-value" id="quickCountdown">Loading...</p>
+        <p class="quick-value loading-skeleton" id="quickCountdown">Loading...</p>
+        <div id="quickScheduleDetails" class="quick-schedule-details hidden">
+          <p class="quick-sub" id="quickRaceScheduleDate">Loading...</p>
+          <p class="quick-sub"><strong>FP1:</strong> <span id="quickSessionFp1">--</span></p>
+          <p class="quick-sub"><strong>FP2:</strong> <span id="quickSessionFp2">--</span></p>
+          <p class="quick-sub"><strong>Qualifying:</strong> <span id="quickSessionQuali">--</span></p>
+          <p class="quick-sub"><strong>Race:</strong> <span id="quickSessionRace">--</span></p>
+        </div>
         <div id="quickTrackLayout" class="quick-track-layout"></div>
         <div class="upcoming-race-actions quick-actions">
           <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
