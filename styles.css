@@ -62,8 +62,11 @@ body {
 
 .app-header,
 .dashboard-shell {
-  width: min(1380px, calc(100vw - 4rem));
+  width: 100%;
+  max-width: 1380px;
   margin: 0 auto;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 .app-header {
@@ -414,10 +417,18 @@ body.is-loading .loading-skeleton {
   display: grid;
   gap: 1.5rem;
   align-content: start;
+  min-width: 0;
 }
 
 .layout-bottom {
   grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
 }
 
 .race-center-stack.two-up {
@@ -1555,7 +1566,8 @@ body[data-module="nba"] .live-hud {
 @media (max-width: 600px) {
   .app-header,
   .dashboard-shell {
-    width: calc(100vw - 2rem);
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 
   .tab-btn,

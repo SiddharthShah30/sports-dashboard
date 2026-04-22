@@ -2022,13 +2022,6 @@ function renderF1Skeleton() {
       </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
-        <div id="racePredictionPanel">
-          <p class="empty-state">Running model on current + historical race data...</p>
-        </div>
-      </article>
-
-      <article class="glass-card card-entry">
         <h3 class="card-title">Season Roadmap</h3>
         <div id="seasonCalendarStrip" class="season-calendar-strip">
           <p class="empty-state">Loading season roadmap...</p>
@@ -2060,7 +2053,7 @@ function renderF1Skeleton() {
       </article>
     </aside>
 
-    <section class="layout-bottom dashboard-grid bottom-grid" style="grid-column: 1/-1; gap: 1.5rem;">
+    <section class="layout-bottom bottom-grid">
       <article class="glass-card card-entry" style="grid-column: span 8;">
         <h3 class="card-title">Paddock Intelligence Explorer</h3>
         <div id="infoTabs" class="tab-strip">
