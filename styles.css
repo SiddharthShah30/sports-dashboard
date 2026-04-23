@@ -35,6 +35,9 @@ body {
     radial-gradient(circle at 12% 82%, rgba(77, 137, 255, 0.2), transparent 30%),
     linear-gradient(135deg, var(--bg-0), var(--bg-1) 44%, var(--bg-2));
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .bg-lights {
@@ -209,6 +212,7 @@ body.is-loading .loading-skeleton {
   margin-bottom: 2rem;
   background: rgba(var(--accent-rgb), 0.05);
   border: 1px solid rgba(var(--accent-rgb), 0.2);
+  min-width: 0;
 }
 
 .hud-ticker-wrap {
@@ -425,6 +429,7 @@ body.is-loading .loading-skeleton {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .dashboard-grid.f1-layout {
@@ -438,6 +443,7 @@ body.is-loading .loading-skeleton {
   gap: 1.2rem;
   margin-bottom: 1.4rem;
   align-items: stretch;
+  min-width: 0;
 }
 
 .priority-card {
@@ -473,6 +479,11 @@ body.is-loading .loading-skeleton {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1.5rem;
+  min-width: 0;
+}
+
+.bottom-grid > * {
+  min-width: 0;
 }
 
 .race-center-stack.two-up {
@@ -752,6 +763,19 @@ body.is-loading .loading-skeleton {
 
 .layout-side .glass-card {
   margin-bottom: 0;
+}
+
+@media (max-width: 1280px) {
+  .priority-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .priority-card {
+    flex: 1 1 320px;
+    min-width: 0;
+  }
 }
 
 .telemetry-feed {
@@ -1611,7 +1635,8 @@ body[data-module="nba"] .live-hud {
   }
 
   .priority-strip {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
   }
 
   .layout-bottom {

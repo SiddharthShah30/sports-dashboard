@@ -1188,34 +1188,6 @@ function setupGridMapLauncher(lat, lon, circuitName) {
   });
 }
 
-function formatRaceDateTime(date, time) {
-  if (!date) {
-    return { weekday: "TBD", dateLabel: "TBD", timeLabel: "TBD" };
-  }
-
-  const iso = `${date}T${time || "00:00:00Z"}`;
-  const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) {
-    return { weekday: "TBD", dateLabel: date, timeLabel: time || "TBD" };
-  }
-
-  return {
-    weekday: new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(dt),
-    dateLabel: new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      timeZone: "UTC"
-    }).format(dt),
-    timeLabel: new Intl.DateTimeFormat("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "UTC"
-    }).format(dt)
-  };
-}
-
 function renderMiniStandingsRows(rows, type) {
   if (!rows.length) {
     return "<p class='empty-state'>No standings data available.</p>";
@@ -1959,7 +1931,6 @@ async function renderF1() {
 
     const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
     const trackTimeZone = getTrackTimeZone(nextRace);
-    const raceDateParts = formatRaceDateTime(nextRace?.date, nextRace?.time);
     const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timezone, trackTimeZone);
     setupTimezoneAndFxControls();
     const raceMetaEl = qs("#raceMeta");
@@ -1967,18 +1938,6 @@ async function renderF1() {
       raceMetaEl.textContent = nextRace
         ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
         : "No race scheduled";
-    }
-    const raceDayEl = qs("#raceDay");
-    if (raceDayEl) {
-      raceDayEl.textContent = raceDateParts.weekday;
-    }
-    const raceDateEl = qs("#raceDate");
-    if (raceDateEl) {
-      raceDateEl.textContent = raceTimeMode.dateLabel;
-    }
-    const raceTimeEl = qs("#raceTime");
-    if (raceTimeEl) {
-      raceTimeEl.textContent = `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
     }
 
     const racePhase = getRacePhase(nextRace);
