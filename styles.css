@@ -497,6 +497,19 @@ body.is-loading .loading-skeleton {
   padding-top: 0.6rem;
 }
 
+.season-standing-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.45rem 0 0.6rem;
+}
+
+.season-standing-tabs .small-btn.active {
+  border-color: rgba(var(--accent-rgb), 0.8);
+  color: var(--text-0);
+  background: rgba(var(--accent-rgb), 0.22);
+}
+
 .season-standing-mini .sticky-data-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

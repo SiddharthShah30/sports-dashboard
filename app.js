@@ -42,6 +42,7 @@ const state = {
     seasonCalendar: [],
     seasonCompletedRound: 0,
     expandedRound: 0,
+    seasonStandingTab: "overview",
     lastNewsItems: [],
     recentFormMap: {},
     recentFormRound: 0,
@@ -1337,7 +1338,7 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
   const trackTz = getTrackTimeZone(nextRace);
 
   host.innerHTML = `
-    <section class="footer-grid-col">
+    <section class="footer-grid-col" data-standing-section="drivers">
       <div class="footer-grid-head">
         <h4>Drivers Standing</h4>
         <button id="viewAllDriversBtn" class="small-btn" type="button">View All</button>
@@ -1348,7 +1349,7 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
         )
         .join("")}
     </section>
-    <section class="footer-grid-col">
+    <section class="footer-grid-col" data-standing-section="constructors">
       <div class="footer-grid-head"><h4>Constructors</h4></div>
       ${topTeams
         .map((row) => {
@@ -1358,7 +1359,7 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
         })
         .join("")}
     </section>
-    <section class="footer-grid-col">
+    <section class="footer-grid-col" data-standing-section="paddock">
       <div class="footer-grid-head"><h4>My Paddock</h4></div>
       <div class="footer-row"><span>Favorite Team</span><strong>${escapeHtml(state.favoriteTeam || "Not set")}</strong></div>
       <div class="footer-row"><span>Favorite Driver</span><strong>${escapeHtml(selectedDriver ? `${selectedDriver.Driver.givenName} ${selectedDriver.Driver.familyName}` : "Not set")}</strong></div>
@@ -1366,6 +1367,8 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
       <p class="inline-meta">Quick-access grid for burst sessions.</p>
     </section>
   `;
+
+  setupSeasonStandingTabs();
 
   const viewAllBtn = qs("#viewAllDriversBtn");
   if (viewAllBtn) {
@@ -1528,6 +1531,53 @@ function setupCurrentStandingToggle() {
     triggerMicroFeedback();
     renderCurrentStandingView();
   };
+}
+
+function applySeasonStandingTab() {
+  const host = qs("#stickyDataGrid");
+  if (!host) {
+    return;
+  }
+
+  const activeTab = state.f1.seasonStandingTab || "overview";
+  qsa("#stickyDataGrid .footer-grid-col").forEach((col) => {
+    const section = col.dataset.standingSection || "overview";
+    const visible = activeTab === "overview" ? true : section === activeTab;
+    col.classList.toggle("hidden", !visible);
+  });
+
+  const tabMap = {
+    overview: qs("#seasonStandingOverviewTab"),
+    drivers: qs("#seasonStandingDriversTab"),
+    constructors: qs("#seasonStandingConstructorsTab")
+  };
+  Object.entries(tabMap).forEach(([key, btn]) => {
+    if (btn) {
+      btn.classList.toggle("active", key === activeTab);
+    }
+  });
+}
+
+function setupSeasonStandingTabs() {
+  const tabs = [
+    { id: "#seasonStandingOverviewTab", tab: "overview" },
+    { id: "#seasonStandingDriversTab", tab: "drivers" },
+    { id: "#seasonStandingConstructorsTab", tab: "constructors" }
+  ];
+
+  tabs.forEach(({ id, tab }) => {
+    const btn = qs(id);
+    if (!btn) {
+      return;
+    }
+    btn.onclick = () => {
+      state.f1.seasonStandingTab = tab;
+      triggerMicroFeedback();
+      applySeasonStandingTab();
+    };
+  });
+
+  applySeasonStandingTab();
 }
 
 function renderPaddockQuiz(phaseLabel) {
@@ -1889,6 +1939,11 @@ function renderF1Skeleton() {
         </div>
         <div class="season-standing-mini">
           <p class="kicker">Season Standing</p>
+          <div class="season-standing-tabs" role="tablist" aria-label="Season standing views">
+            <button id="seasonStandingOverviewTab" class="small-btn" type="button">Overview</button>
+            <button id="seasonStandingDriversTab" class="small-btn" type="button">Drivers</button>
+            <button id="seasonStandingConstructorsTab" class="small-btn" type="button">Constructors</button>
+          </div>
           <div id="stickyDataGrid" class="sticky-data-grid">
             <p class="empty-state">Loading standings snapshot...</p>
           </div>
