@@ -598,6 +598,86 @@ body.is-loading .loading-skeleton {
     linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
 }
 
+.weekend-hero {
+  border: 1px solid rgba(var(--accent-rgb), 0.36);
+  border-radius: 16px;
+  padding: 0.95rem;
+  background: linear-gradient(145deg, rgba(var(--accent-rgb), 0.16), rgba(255, 255, 255, 0.02));
+  margin-bottom: 0.8rem;
+}
+
+.weekend-hero strong {
+  display: block;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(1.55rem, 3.2vw, 2.25rem);
+  letter-spacing: 0.02em;
+  line-height: 1.06;
+}
+
+.weekend-event-board {
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 0.72rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weekend-lead {
+  margin-bottom: 0.6rem;
+}
+
+.weekend-lead-text {
+  margin: 0.1rem 0 0.3rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.2rem;
+  color: var(--text-0);
+}
+
+.weekend-session-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.session-tile {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.62rem;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+}
+
+.session-tile strong {
+  display: block;
+  margin: 0.1rem 0;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.08rem;
+}
+
+.session-tile p {
+  margin: 0.15rem 0;
+  color: var(--text-1);
+}
+
+.session-status {
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+}
+
+.session-tile.featured {
+  border-color: rgba(var(--accent-rgb), 0.84);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.36) inset;
+}
+
+.session-tile.live .session-status {
+  color: rgba(255, 99, 99, 0.95);
+}
+
+.session-tile.done {
+  opacity: 0.65;
+}
+
 .next-race-meta {
   min-height: 100%;
 }
@@ -1192,7 +1272,7 @@ body.is-loading .loading-skeleton {
   font-family: "Barlow Condensed", sans-serif;
   letter-spacing: 0.02em;
   line-height: 1;
-  font-size: clamp(1.9rem, 4vw, 3rem);
+  font-size: clamp(2.15rem, 4.8vw, 3.5rem);
 }
 
 .upcoming-race-actions {
@@ -1717,6 +1797,10 @@ body[data-module="nba"] .live-hud {
   .priority-strip {
     display: flex;
     flex-direction: column;
+  }
+
+  .weekend-session-grid {
+    grid-template-columns: 1fr;
   }
 
   .layout-main {

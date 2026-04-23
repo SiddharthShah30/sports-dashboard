@@ -286,6 +286,88 @@ function formatEventTimeByMode(date, time, selectedTimezone = state.timezone, tr
   };
 }
 
+function buildWeekendSessions(nextRace) {
+  const practiceSlot = nextRace?.ThirdPractice || nextRace?.SecondPractice || nextRace?.FirstPractice || null;
+  return [
+    {
+      key: "practice",
+      label: "Practice",
+      date: practiceSlot?.date,
+      time: practiceSlot?.time,
+      durationHours: 1
+    },
+    {
+      key: "qualifying",
+      label: "Qualifying",
+      date: nextRace?.Qualifying?.date,
+      time: nextRace?.Qualifying?.time,
+      durationHours: 1
+    },
+    {
+      key: "race",
+      label: "Race",
+      date: nextRace?.date,
+      time: nextRace?.time,
+      durationHours: 2
+    }
+  ].map((item) => {
+    const stamp = item.date ? new Date(`${item.date}T${item.time || "00:00:00Z"}`).getTime() : NaN;
+    return {
+      ...item,
+      stamp: Number.isFinite(stamp) ? stamp : null
+    };
+  });
+}
+
+function renderWeekendEventBoard(nextRace, trackTimeZone, weatherSummary) {
+  const board = qs("#weekendEventBoard");
+  if (!board) {
+    return;
+  }
+
+  const sessions = buildWeekendSessions(nextRace);
+  const now = Date.now();
+  const nextSession = sessions.find((session) => session.stamp && session.stamp > now)
+    || sessions.find((session) => session.stamp && session.stamp + (session.durationHours * 60 * 60 * 1000) > now)
+    || sessions[sessions.length - 1];
+
+  const leadText = nextSession?.stamp
+    ? `${nextSession.label} starts ${formatCountdown(new Date(nextSession.stamp).toISOString())}`
+    : "Weekend session times pending";
+
+  board.innerHTML = `
+    <div class="weekend-lead">
+      <p class="kicker">Next Major Event</p>
+      <p class="weekend-lead-text">${escapeHtml(leadText)}</p>
+      <p class="inline-meta">Track weather: ${escapeHtml(weatherSummary || "Unavailable")}</p>
+    </div>
+    <div class="weekend-session-grid">
+      ${sessions.map((session) => {
+        const formatted = formatEventTimeByMode(session.date, session.time, state.timezone, trackTimeZone);
+        let status = "upcoming";
+        if (session.stamp) {
+          const end = session.stamp + (session.durationHours * 60 * 60 * 1000);
+          if (now >= session.stamp && now <= end) {
+            status = "live";
+          } else if (now > end) {
+            status = "done";
+          }
+        }
+        const featured = session.key === nextSession?.key ? " featured" : "";
+
+        return `
+          <article class="session-tile ${status}${featured}">
+            <p class="kicker">${escapeHtml(session.label)}</p>
+            <strong>${escapeHtml(formatted.dateLabel)}</strong>
+            <p>${escapeHtml(formatted.timeLabel)} ${escapeHtml(formatted.zoneLabel)}</p>
+            <span class="session-status">${escapeHtml(status.toUpperCase())}</span>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -1866,17 +1948,14 @@ function renderF1Skeleton() {
   grid.innerHTML = `
     <section class="top-duo">
       <article class="glass-card card-entry next-race-card">
-        <h3 class="card-title">Next Race <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
-        <div class="upcoming-race-grid">
-          <div class="upcoming-race-countdown">
-            <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
-            <strong id="nextRaceName">Grand Prix loading...</strong>
-            <p class="race-countdown-xl" id="nextRaceStart">--</p>
-            <p class="inline-meta" id="nextRaceWeather">Weather loading...</p>
-          </div>
-          <div class="season-calendar-detail next-race-meta" id="nextRaceMeta">
-            <p class="empty-state">Loading event details...</p>
-          </div>
+        <h3 class="card-title">Next F1 Event Weekend <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+        <div class="weekend-hero">
+          <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
+          <strong id="nextRaceName">Grand Prix loading...</strong>
+          <p class="race-countdown-xl" id="nextRaceStart">--</p>
+        </div>
+        <div id="weekendEventBoard" class="weekend-event-board">
+          <p class="empty-state">Loading weekend sessions...</p>
         </div>
         <div class="upcoming-race-actions quick-actions">
           <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
@@ -2062,15 +2141,6 @@ async function renderF1() {
     if (nextRaceStartEl) {
       nextRaceStartEl.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel}`;
     }
-    const nextRaceMetaEl = qs("#nextRaceMeta");
-    if (nextRaceMetaEl) {
-      const country = nextRace?.Circuit?.Location?.country || "Country TBD";
-      nextRaceMetaEl.innerHTML = `
-        <p><strong>${escapeHtml(country)}</strong></p>
-        <p>Timezone: ${escapeHtml(raceTimeMode.zoneLabel)}</p>
-        <p>Session Mode: ${escapeHtml(timezoneLabel(state.timezone))}</p>
-      `;
-    }
 
     const racePhase = getRacePhase(nextRace);
     const raceStateBadge = qs("#raceStateBadge");
@@ -2099,10 +2169,7 @@ async function renderF1() {
     const lat = nextRace?.Circuit?.Location?.lat;
     const lon = nextRace?.Circuit?.Location?.long;
     const weatherSummary = await fetchTrackWeather(lat, lon);
-    const nextRaceWeatherEl = qs("#nextRaceWeather");
-    if (nextRaceWeatherEl) {
-      nextRaceWeatherEl.textContent = `Track weather: ${weatherSummary}`;
-    }
+    renderWeekendEventBoard(nextRace, trackTimeZone, weatherSummary);
     updateLiveHUD({
       raceName: nextRace?.raceName || "No upcoming race",
       country: nextRace?.Circuit?.Location?.country || "",
