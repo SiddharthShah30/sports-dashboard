@@ -1128,6 +1128,158 @@ function renderTrackMap(circuitId) {
   `;
 }
 
+function renderPracticeStandouts(drivers) {
+  const host = qs("#practiceStandouts");
+  if (!host) {
+    return;
+  }
+
+  if (!drivers?.length) {
+    host.innerHTML = "<p class='empty-state'>Practice standouts unavailable right now.</p>";
+    return;
+  }
+
+  const standouts = drivers
+    .map((entry) => {
+      const id = entry.Driver.driverId;
+      const form = state.f1.recentFormMap[id] || [];
+      const avgFinish = form.length ? form.reduce((sum, value) => sum + value, 0) / form.length : 14;
+      const momentum = Math.max(0, 20 - avgFinish) + (toNum(entry.wins) * 0.4);
+      const name = `${entry.Driver.givenName} ${entry.Driver.familyName}`;
+      const code = entry.Driver.code || entry.Driver.familyName.slice(0, 3).toUpperCase();
+      return {
+        name,
+        code,
+        avgFinish,
+        momentum,
+        team: entry.Constructors?.[0]?.name || "Unknown Team"
+      };
+    })
+    .sort((a, b) => b.momentum - a.momentum)
+    .slice(0, 5);
+
+  host.innerHTML = `
+    <p class="inline-meta">Practice Watchlist (recent-form proxy): best average race pace over recent rounds.</p>
+    <div class="practice-list">
+      ${standouts.map((row, idx) => `
+        <div class="practice-item">
+          <span>P${idx + 1} ${escapeHtml(row.code)} • ${escapeHtml(row.name)}</span>
+          <strong>${row.avgFinish.toFixed(1)} avg finish</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderSprintInsight(nextRace, trackTimeZone) {
+  const host = qs("#sprintInsight");
+  if (!host) {
+    return;
+  }
+
+  const sprintDate = nextRace?.Sprint?.date;
+  const sprintTime = nextRace?.Sprint?.time;
+  const sprintShootoutDate = nextRace?.SprintQualifying?.date;
+  const sprintShootoutTime = nextRace?.SprintQualifying?.time;
+  const hasSprintWeekend = Boolean(sprintDate || sprintShootoutDate);
+
+  if (!hasSprintWeekend) {
+    host.innerHTML = `
+      <p class="inline-meta">Sprint Racing Status</p>
+      <p class="empty-state">No sprint race listed for this round. Standard weekend format applies.</p>
+      <p class="inline-meta">Sprint weekends remain important for strategy pressure and reduced setup time.</p>
+    `;
+    return;
+  }
+
+  const sprintRace = formatEventTimeByMode(sprintDate, sprintTime, state.timezone, trackTimeZone);
+  const shootout = formatEventTimeByMode(sprintShootoutDate, sprintShootoutTime, state.timezone, trackTimeZone);
+
+  host.innerHTML = `
+    <p class="inline-meta">Sprint Racing Status</p>
+    <div class="sprint-note-box">
+      <p><strong>Sprint Shootout:</strong> ${escapeHtml(shootout.dateLabel)} ${escapeHtml(shootout.timeLabel)} ${escapeHtml(shootout.zoneLabel)}</p>
+      <p><strong>Sprint Race:</strong> ${escapeHtml(sprintRace.dateLabel)} ${escapeHtml(sprintRace.timeLabel)} ${escapeHtml(sprintRace.zoneLabel)}</p>
+      <p class="inline-meta">Sprint format can reset race-weekend momentum and grid strategy.</p>
+    </div>
+  `;
+}
+
+function renderGridAfterQualifying(nextRace, qualifyingRows, resultRows) {
+  const host = qs("#latestGridLayout");
+  const hint = qs("#gridLaunchHint");
+  if (!host) {
+    return;
+  }
+
+  const qDate = nextRace?.Qualifying?.date;
+  const qTime = nextRace?.Qualifying?.time;
+  const qStamp = qDate ? new Date(`${qDate}T${qTime || "00:00:00Z"}`).getTime() : NaN;
+  const qualifyingFinished = Number.isFinite(qStamp) && Date.now() >= qStamp;
+
+  if (!qualifyingFinished) {
+    host.innerHTML = "<p class='empty-state'>Starting grid unlocks once qualifying is complete.</p>";
+    if (hint) {
+      hint.textContent = "Grid locked until post-qualifying";
+    }
+    return;
+  }
+
+  if (!qualifyingRows?.length) {
+    host.innerHTML = "<p class='empty-state'>Qualifying classification is syncing. Check back shortly.</p>";
+    if (hint) {
+      hint.textContent = "Awaiting official qualifying classification";
+    }
+    return;
+  }
+
+  host.innerHTML = renderStartingGridLayout(qualifyingRows, resultRows);
+  if (hint) {
+    hint.textContent = "Official qualifying grid. Click a slot to open circuit map.";
+  }
+}
+
+function setupTrackViewOptions() {
+  const views = {
+    circuit: qs("#trackCircuitView"),
+    practice: qs("#trackPracticeView"),
+    sprint: qs("#trackSprintView")
+  };
+  const buttons = {
+    circuit: qs("#viewCircuitBtn"),
+    practice: qs("#viewPracticeBtn"),
+    sprint: qs("#viewSprintBtn")
+  };
+
+  if (!views.circuit || !views.practice || !views.sprint || !buttons.circuit || !buttons.practice || !buttons.sprint) {
+    return;
+  }
+
+  const activate = (key) => {
+    Object.entries(views).forEach(([name, panel]) => {
+      panel.classList.toggle("hidden", name !== key);
+    });
+    Object.entries(buttons).forEach(([name, button]) => {
+      button.classList.toggle("active", name === key);
+    });
+  };
+
+  buttons.circuit.onclick = () => {
+    triggerMicroFeedback();
+    activate("circuit");
+  };
+  buttons.practice.onclick = () => {
+    triggerMicroFeedback();
+    activate("practice");
+  };
+  buttons.sprint.onclick = () => {
+    triggerMicroFeedback();
+    activate("sprint");
+  };
+
+  activate("circuit");
+}
+
 function highlightGridPosition(position) {
   const pos = toNum(position);
   if (!pos) {
@@ -2030,27 +2182,35 @@ function renderF1Skeleton() {
           <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
           <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
         </div>
-        <p class="inline-meta" id="livePulse">Live pulse initializing...</p>
-        <div id="telemetryFeed" class="telemetry-feed">
-          <p class="empty-state">Loading telemetry feed...</p>
+        <div class="track-view-switch" role="tablist" aria-label="Track data views">
+          <button id="viewCircuitBtn" class="small-btn" type="button">Circuit & Grid</button>
+          <button id="viewPracticeBtn" class="small-btn" type="button">Practice Standouts</button>
+          <button id="viewSprintBtn" class="small-btn" type="button">Sprint Racing</button>
         </div>
-        <div id="paddockQuiz" class="paddock-quiz hidden">
-          <h4>Pre-Race Quiz</h4>
-          <p id="quizQuestion">Loading question...</p>
-          <div id="quizOptions" class="quiz-options"></div>
-          <p id="quizScore" class="inline-meta">Score: 0/0</p>
-        </div>
-        <div class="start-lights" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="race-center-stack two-up">
-          <div>
-            <p class="inline-meta" id="trackLayoutHint">Circuit Geometry</p>
+
+        <div id="trackCircuitView">
+          <div class="track-mockup-wrap">
+            <p class="inline-meta" id="trackLayoutHint">Circuit Mockup</p>
             <div id="raceTrackLayout"></div>
           </div>
-          <div>
-            <p class="inline-meta">Starting Positions</p>
+          <div class="start-lights" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="grid-panel-wrap">
+            <p class="inline-meta">Starting Grid</p>
             <div id="latestGridLayout"></div>
+          </div>
+        </div>
+
+        <div id="trackPracticeView" class="hidden">
+          <div id="practiceStandouts">
+            <p class="empty-state">Loading practice standouts...</p>
+          </div>
+        </div>
+
+        <div id="trackSprintView" class="hidden">
+          <div id="sprintInsight">
+            <p class="empty-state">Loading sprint racing context...</p>
           </div>
         </div>
       </article>
@@ -2213,9 +2373,6 @@ async function renderF1() {
     if (raceStateDetail) {
       raceStateDetail.textContent = racePhase.detail;
     }
-    renderPaddockQuiz(racePhase.label);
-    renderTelemetryFeed(nextRace, racePhase.label);
-
     const leader = drivers[0];
     const second = drivers[1];
     const leaderName = leader ? `${leader.Driver.givenName} ${leader.Driver.familyName}` : "No leader";
@@ -2253,11 +2410,14 @@ async function renderF1() {
 
     qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
     setupUpcomingRaceActions(nextRace);
+    renderPracticeStandouts(drivers);
+    renderSprintInsight(nextRace, trackTimeZone);
+    setupTrackViewOptions();
 
     renderSeasonCalendar(seasonCalendar);
     setupSeasonCalendarEvents(seasonCalendar);
 
-    qs("#latestGridLayout").innerHTML = renderStartingGridLayout(lastQualifying, lastRaceResults);
+    renderGridAfterQualifying(nextRace, lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);
 
     qs("#driverStandings").innerHTML = renderStandingsList(drivers);

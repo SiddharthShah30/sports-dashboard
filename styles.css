@@ -759,6 +759,70 @@ body.is-loading .loading-skeleton {
   margin-bottom: 0.5rem;
 }
 
+.track-view-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.65rem;
+}
+
+.track-view-switch .small-btn.active {
+  border-color: rgba(var(--accent-rgb), 0.75);
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--text-0);
+}
+
+.track-mockup-wrap,
+.grid-panel-wrap {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.62rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.grid-panel-wrap {
+  margin-top: 0.55rem;
+}
+
+.practice-list {
+  display: grid;
+  gap: 0.42rem;
+  margin-top: 0.55rem;
+}
+
+.practice-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.56rem 0.62rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.practice-item span {
+  color: var(--text-1);
+}
+
+.practice-item strong {
+  color: var(--text-0);
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.sprint-note-box {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.66rem;
+  background: linear-gradient(155deg, rgba(var(--accent-rgb), 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.sprint-note-box p {
+  margin: 0.22rem 0;
+  color: var(--text-1);
+}
+
 .race-state-badge {
   display: inline-flex;
   align-items: center;
@@ -926,7 +990,7 @@ body.is-loading .loading-skeleton {
 
 .track-map {
   width: 100%;
-  height: 200px;
+  height: 230px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: rgba(0, 0, 0, 0.2);
@@ -1859,6 +1923,11 @@ body[data-module="nba"] .live-hud {
 
   .weekend-session-grid {
     grid-template-columns: 1fr;
+  }
+
+  .practice-item {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .layout-main {
