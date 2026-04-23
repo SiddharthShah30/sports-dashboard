@@ -127,6 +127,37 @@ const TRACK_PATHS = {
   spa: "M30 105 L65 65 L120 35 L180 45 L230 65 L250 95 L205 120 L145 115 L90 125"
 };
 
+const TRACK_VECTOR_BASE_URL = "https://raw.githubusercontent.com/julesr0y/f1-circuits-svg/main/circuits/minimal/white-outline";
+
+const CIRCUIT_VECTOR_LAYOUTS = {
+  albert_park: "melbourne-2",
+  bahrain: "bahrain-3",
+  jeddah: "jeddah-1",
+  suzuka: "suzuka-2",
+  shanghai: "shanghai-1",
+  miami: "miami-1",
+  imola: "imola-3",
+  monaco: "monaco-6",
+  gilles_villeneuve: "montreal-6",
+  catalunya: "catalunya-6",
+  red_bull_ring: "spielberg-3",
+  silverstone: "silverstone-8",
+  hungaroring: "hungaroring-3",
+  spa: "spa-francorchamps-4",
+  zandvoort: "zandvoort-5",
+  monza: "monza-7",
+  baku: "baku-1",
+  marina_bay: "marina-bay-4",
+  americas: "austin-1",
+  rodriguez: "mexico-city-3",
+  interlagos: "interlagos-2",
+  las_vegas: "las-vegas-1",
+  vegas: "las-vegas-1",
+  losail: "lusail-1",
+  lusail: "lusail-1",
+  yas_marina: "yas-marina-2"
+};
+
 const CIRCUIT_TIMEZONES = {
   albert_park: "Australia/Melbourne",
   bahrain: "Asia/Bahrain",
@@ -1111,47 +1142,22 @@ function renderConstructorBars(constructors) {
 }
 
 function renderTrackMap(circuitId) {
+  const vectorLayoutId = CIRCUIT_VECTOR_LAYOUTS[circuitId] || "";
+  if (vectorLayoutId) {
+    const src = `${TRACK_VECTOR_BASE_URL}/${vectorLayoutId}.svg`;
+    return `
+      <div class="track-map card-entry vector-map">
+        <img class="track-vector-image" src="${escapeHtml(src)}" alt="${escapeHtml(circuitId)} circuit vector" loading="lazy" />
+        <p class="inline-meta track-vector-attrib">Track vector: julesr0y/f1-circuits-svg (CC BY 4.0)</p>
+      </div>
+    `;
+  }
+
   const path = getTrackPathByCircuit(circuitId);
-  const commands = path.match(/[ML][^MLZ]+/g) || [];
-  const points = commands
-    .map((command) => {
-      const pair = command.slice(1).trim().split(/\s+/);
-      const x = Number(pair[0]);
-      const y = Number(pair[1]);
-      return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-    })
-    .filter(Boolean);
-
-  const buildSectorPath = (startIndex, endIndex) => {
-    const segment = points.slice(startIndex, endIndex);
-    if (segment.length < 2) {
-      return path;
-    }
-    return `M${segment.map((point) => `${point.x} ${point.y}`).join(" L")}`;
-  };
-
-  const firstPoint = points[0] || { x: 50, y: 50 };
-  const midPointOne = points[Math.max(1, Math.floor(points.length / 3))] || firstPoint;
-  const midPointTwo = points[Math.max(2, Math.floor((points.length * 2) / 3))] || firstPoint;
-  const lastPoint = points[points.length - 1] || firstPoint;
-  const dots = Array.from({ length: 20 }, (_, idx) => {
-    const angle = (idx / 20) * Math.PI * 2;
-    const cx = 140 + Math.cos(angle) * 92;
-    const cy = 80 + Math.sin(angle) * 48;
-    return `<circle class="grid-dot" data-grid-dot="${idx + 1}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3"></circle>`;
-  }).join("");
   return `
     <div class="track-map card-entry">
       <svg viewBox="0 0 280 160" role="img" aria-label="Circuit mini map">
-        <path class="track-line track-outline" d="${path}"></path>
-        <path class="track-sector sector-one" d="${buildSectorPath(0, Math.max(2, Math.floor(points.length / 3) + 1))}"></path>
-        <path class="track-sector sector-two" d="${buildSectorPath(Math.max(1, Math.floor(points.length / 3)), Math.max(3, Math.floor((points.length * 2) / 3) + 1))}"></path>
-        <path class="track-sector sector-three" d="${buildSectorPath(Math.max(2, Math.floor((points.length * 2) / 3)), points.length)}"></path>
-        <circle class="track-start" cx="${firstPoint.x.toFixed(1)}" cy="${firstPoint.y.toFixed(1)}" r="4.5"></circle>
-        <text class="track-sector-label" x="${midPointOne.x.toFixed(1)}" y="${(midPointOne.y - 6).toFixed(1)}">S1</text>
-        <text class="track-sector-label" x="${midPointTwo.x.toFixed(1)}" y="${(midPointTwo.y - 6).toFixed(1)}">S2</text>
-        <text class="track-sector-label" x="${lastPoint.x.toFixed(1)}" y="${(lastPoint.y - 6).toFixed(1)}">S3</text>
-        ${dots}
+        <path class="track-line" d="${path}"></path>
       </svg>
     </div>
   `;
@@ -2216,7 +2222,7 @@ function renderF1Skeleton() {
 
         <div id="trackCircuitView">
           <div class="track-mockup-wrap">
-            <p class="inline-meta" id="trackLayoutHint">Circuit Mockup</p>
+            <p class="inline-meta" id="trackLayoutHint">Circuit Vector</p>
             <div id="raceTrackLayout"></div>
           </div>
           <div class="start-lights" aria-hidden="true">

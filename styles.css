@@ -988,11 +988,31 @@ body.is-loading .loading-skeleton {
   height: 230px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.2);
+  background: linear-gradient(180deg, rgba(10, 17, 28, 0.9), rgba(16, 24, 40, 0.88));
   padding: 0.62rem;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.track-map.vector-map {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 0.35rem;
+  padding: 0.75rem;
+}
+
+.track-vector-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.45));
+}
+
+.track-vector-attrib {
+  margin: 0;
+  text-align: right;
+  font-size: 0.72rem;
 }
 
 .track-map.real-map {
@@ -1504,42 +1524,6 @@ body.is-loading .loading-skeleton {
   stroke-dasharray: 650;
   stroke-dashoffset: 650;
   animation: drawTrack 1.15s ease forwards;
-}
-
-.track-outline {
-  stroke: rgba(245, 247, 255, 0.22);
-  stroke-width: 10;
-  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.35));
-}
-
-.track-sector {
-  fill: none;
-  stroke-width: 4.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.95;
-}
-
-.sector-one { stroke: rgba(var(--accent-rgb), 0.92); }
-.sector-two { stroke: rgba(104, 199, 255, 0.92); }
-.sector-three { stroke: rgba(255, 214, 92, 0.92); }
-
-.track-start {
-  fill: #fff;
-  stroke: rgba(var(--accent-rgb), 0.95);
-  stroke-width: 2.2;
-  filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.7));
-}
-
-.track-sector-label {
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 10px;
-  font-weight: 700;
-  fill: rgba(255, 255, 255, 0.9);
-  paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.72);
-  stroke-width: 2px;
-  stroke-linejoin: round;
 }
 
 .grid-dot {
