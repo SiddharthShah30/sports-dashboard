@@ -1112,6 +1112,28 @@ function renderConstructorBars(constructors) {
 
 function renderTrackMap(circuitId) {
   const path = getTrackPathByCircuit(circuitId);
+  const commands = path.match(/[ML][^MLZ]+/g) || [];
+  const points = commands
+    .map((command) => {
+      const pair = command.slice(1).trim().split(/\s+/);
+      const x = Number(pair[0]);
+      const y = Number(pair[1]);
+      return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    })
+    .filter(Boolean);
+
+  const buildSectorPath = (startIndex, endIndex) => {
+    const segment = points.slice(startIndex, endIndex);
+    if (segment.length < 2) {
+      return path;
+    }
+    return `M${segment.map((point) => `${point.x} ${point.y}`).join(" L")}`;
+  };
+
+  const firstPoint = points[0] || { x: 50, y: 50 };
+  const midPointOne = points[Math.max(1, Math.floor(points.length / 3))] || firstPoint;
+  const midPointTwo = points[Math.max(2, Math.floor((points.length * 2) / 3))] || firstPoint;
+  const lastPoint = points[points.length - 1] || firstPoint;
   const dots = Array.from({ length: 20 }, (_, idx) => {
     const angle = (idx / 20) * Math.PI * 2;
     const cx = 140 + Math.cos(angle) * 92;
@@ -1121,7 +1143,14 @@ function renderTrackMap(circuitId) {
   return `
     <div class="track-map card-entry">
       <svg viewBox="0 0 280 160" role="img" aria-label="Circuit mini map">
-        <path class="track-line" d="${path}"></path>
+        <path class="track-line track-outline" d="${path}"></path>
+        <path class="track-sector sector-one" d="${buildSectorPath(0, Math.max(2, Math.floor(points.length / 3) + 1))}"></path>
+        <path class="track-sector sector-two" d="${buildSectorPath(Math.max(1, Math.floor(points.length / 3)), Math.max(3, Math.floor((points.length * 2) / 3) + 1))}"></path>
+        <path class="track-sector sector-three" d="${buildSectorPath(Math.max(2, Math.floor((points.length * 2) / 3)), points.length)}"></path>
+        <circle class="track-start" cx="${firstPoint.x.toFixed(1)}" cy="${firstPoint.y.toFixed(1)}" r="4.5"></circle>
+        <text class="track-sector-label" x="${midPointOne.x.toFixed(1)}" y="${(midPointOne.y - 6).toFixed(1)}">S1</text>
+        <text class="track-sector-label" x="${midPointTwo.x.toFixed(1)}" y="${(midPointTwo.y - 6).toFixed(1)}">S2</text>
+        <text class="track-sector-label" x="${lastPoint.x.toFixed(1)}" y="${(lastPoint.y - 6).toFixed(1)}">S3</text>
         ${dots}
       </svg>
     </div>
