@@ -1148,7 +1148,6 @@ function renderTrackMap(circuitId) {
     return `
       <div class="track-map card-entry vector-map">
         <img class="track-vector-image" src="${escapeHtml(src)}" alt="${escapeHtml(circuitId)} circuit vector" loading="lazy" />
-        <p class="inline-meta track-vector-attrib">Track vector: julesr0y/f1-circuits-svg (CC BY 4.0)</p>
       </div>
     `;
   }
@@ -2222,11 +2221,8 @@ function renderF1Skeleton() {
 
         <div id="trackCircuitView">
           <div class="track-mockup-wrap">
-            <p class="inline-meta" id="trackLayoutHint">Circuit Vector</p>
+            <p class="inline-meta" id="trackLayoutHint">Circuit Vector • Source: julesr0y/f1-circuits-svg (CC BY 4.0)</p>
             <div id="raceTrackLayout"></div>
-          </div>
-          <div class="start-lights" aria-hidden="true">
-            <span></span><span></span><span></span><span></span><span></span>
           </div>
           <div class="grid-panel-wrap">
             <p class="inline-meta">Starting Grid</p>
