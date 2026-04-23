@@ -606,25 +606,20 @@ body.is-loading .loading-skeleton {
   margin-bottom: 0.8rem;
 }
 
-.weekend-hero-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.9rem;
-  align-items: start;
-}
-
 .weekend-hero strong {
   display: block;
   font-family: "Barlow Condensed", sans-serif;
   font-size: clamp(1.45rem, 3vw, 2.15rem);
   letter-spacing: 0.02em;
   line-height: 1.06;
+  margin: 0.2rem 0 0.15rem;
 }
 
 .countdown-rack {
   display: grid;
-  grid-template-columns: repeat(4, minmax(72px, 96px));
-  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(72px, 94px));
+  gap: 0.55rem;
+  margin-top: 0.46rem;
 }
 
 .countdown-box {
@@ -1382,7 +1377,7 @@ body.is-loading .loading-skeleton {
 }
 
 .race-countdown-xl {
-  margin: 0.45rem 0 0.12rem;
+  margin: 0.08rem 0 0.22rem;
   font-family: "Barlow Condensed", sans-serif;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -1911,10 +1906,6 @@ body[data-module="nba"] .live-hud {
   .priority-strip {
     display: flex;
     flex-direction: column;
-  }
-
-  .weekend-hero-top {
-    grid-template-columns: 1fr;
   }
 
   .countdown-rack {

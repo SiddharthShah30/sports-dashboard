@@ -2143,29 +2143,26 @@ function renderF1Skeleton() {
         <h3 class="card-title">Next F1 Event Weekend <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
         <div class="weekend-hero">
           <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
-          <div class="weekend-hero-top">
-            <strong id="nextRaceName">Grand Prix loading...</strong>
-            <div class="countdown-rack" aria-label="Race countdown">
-              <div class="countdown-box">
-                <span id="countdownDays" class="countdown-value">--</span>
-                <span class="countdown-label">Days</span>
-              </div>
-              <div class="countdown-box">
-                <span id="countdownHours" class="countdown-value">--</span>
-                <span class="countdown-label">Hours</span>
-              </div>
-              <div class="countdown-box">
-                <span id="countdownMinutes" class="countdown-value">--</span>
-                <span class="countdown-label">Minutes</span>
-              </div>
-              <div class="countdown-box">
-                <span id="countdownSeconds" class="countdown-value">--</span>
-                <span class="countdown-label">Seconds</span>
-              </div>
+          <strong id="nextRaceName">Grand Prix loading...</strong>
+          <p class="race-countdown-xl" id="nextRaceStart">--</p>
+          <div class="countdown-rack" aria-label="Race countdown">
+            <div class="countdown-box">
+              <span id="countdownDays" class="countdown-value">--</span>
+              <span class="countdown-label">Days</span>
+            </div>
+            <div class="countdown-box">
+              <span id="countdownHours" class="countdown-value">--</span>
+              <span class="countdown-label">Hours</span>
+            </div>
+            <div class="countdown-box">
+              <span id="countdownMinutes" class="countdown-value">--</span>
+              <span class="countdown-label">Minutes</span>
+            </div>
+            <div class="countdown-box">
+              <span id="countdownSeconds" class="countdown-value">--</span>
+              <span class="countdown-label">Seconds</span>
             </div>
           </div>
-          <p class="race-countdown-xl" id="nextRaceStart">--</p>
-          <p id="nextRaceCountdownText" class="inline-meta">Countdown loading...</p>
         </div>
         <div id="weekendEventBoard" class="weekend-event-board">
           <p class="empty-state">Loading weekend sessions...</p>
@@ -2360,7 +2357,7 @@ async function renderF1() {
     }
     const nextRaceStartEl = qs("#nextRaceStart");
     if (nextRaceStartEl) {
-      nextRaceStartEl.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel}`;
+      nextRaceStartEl.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
     }
 
     const racePhase = getRacePhase(nextRace);
