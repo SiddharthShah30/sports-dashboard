@@ -1701,17 +1701,57 @@ function renderPaddockQuiz(phaseLabel) {
 }
 
 function setupCountdown(raceDateIso) {
-  const countdownEl = qs("#hudCountdown");
-  if (!countdownEl || !raceDateIso) {
+  if (!raceDateIso) {
     return;
   }
 
   const raceStart = new Date(raceDateIso).getTime();
   const raceEnd = raceStart + 1000 * 60 * 60 * 2;
+  const countdownEl = qs("#hudCountdown");
+  const noteEl = qs("#nextRaceCountdownText");
+  const daysEl = qs("#countdownDays");
+  const hoursEl = qs("#countdownHours");
+  const minutesEl = qs("#countdownMinutes");
+  const secondsEl = qs("#countdownSeconds");
+
+  const countdownParts = () => {
+    const now = Date.now();
+    const diff = Math.max(0, raceStart - now);
+    const dayMs = 1000 * 60 * 60 * 24;
+    const hourMs = 1000 * 60 * 60;
+    const minuteMs = 1000 * 60;
+    const secondMs = 1000;
+
+    const days = Math.floor(diff / dayMs);
+    const hours = Math.floor((diff % dayMs) / hourMs);
+    const minutes = Math.floor((diff % hourMs) / minuteMs);
+    const seconds = Math.floor((diff % minuteMs) / secondMs);
+
+    return { days, hours, minutes, seconds };
+  };
 
   const update = () => {
     const countdownText = formatCountdown(raceDateIso);
-    countdownEl.textContent = countdownText;
+    if (countdownEl) {
+      countdownEl.textContent = countdownText;
+    }
+    if (noteEl) {
+      noteEl.textContent = countdownText;
+    }
+
+    const parts = countdownParts();
+    if (daysEl) {
+      daysEl.textContent = String(parts.days);
+    }
+    if (hoursEl) {
+      hoursEl.textContent = String(parts.hours).padStart(2, "0");
+    }
+    if (minutesEl) {
+      minutesEl.textContent = String(parts.minutes).padStart(2, "0");
+    }
+    if (secondsEl) {
+      secondsEl.textContent = String(parts.seconds).padStart(2, "0");
+    }
 
     const pulse = qs("#livePulse");
     if (pulse) {
@@ -1951,8 +1991,29 @@ function renderF1Skeleton() {
         <h3 class="card-title">Next F1 Event Weekend <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
         <div class="weekend-hero">
           <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
-          <strong id="nextRaceName">Grand Prix loading...</strong>
+          <div class="weekend-hero-top">
+            <strong id="nextRaceName">Grand Prix loading...</strong>
+            <div class="countdown-rack" aria-label="Race countdown">
+              <div class="countdown-box">
+                <span id="countdownDays" class="countdown-value">--</span>
+                <span class="countdown-label">Days</span>
+              </div>
+              <div class="countdown-box">
+                <span id="countdownHours" class="countdown-value">--</span>
+                <span class="countdown-label">Hours</span>
+              </div>
+              <div class="countdown-box">
+                <span id="countdownMinutes" class="countdown-value">--</span>
+                <span class="countdown-label">Minutes</span>
+              </div>
+              <div class="countdown-box">
+                <span id="countdownSeconds" class="countdown-value">--</span>
+                <span class="countdown-label">Seconds</span>
+              </div>
+            </div>
+          </div>
           <p class="race-countdown-xl" id="nextRaceStart">--</p>
+          <p id="nextRaceCountdownText" class="inline-meta">Countdown loading...</p>
         </div>
         <div id="weekendEventBoard" class="weekend-event-board">
           <p class="empty-state">Loading weekend sessions...</p>

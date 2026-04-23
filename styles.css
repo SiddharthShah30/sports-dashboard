@@ -606,12 +606,48 @@ body.is-loading .loading-skeleton {
   margin-bottom: 0.8rem;
 }
 
+.weekend-hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: start;
+}
+
 .weekend-hero strong {
   display: block;
   font-family: "Barlow Condensed", sans-serif;
-  font-size: clamp(1.55rem, 3.2vw, 2.25rem);
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
   letter-spacing: 0.02em;
   line-height: 1.06;
+}
+
+.countdown-rack {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(72px, 96px));
+  gap: 0.5rem;
+}
+
+.countdown-box {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(160deg, rgba(10, 12, 18, 0.92), rgba(20, 26, 34, 0.85));
+  padding: 0.46rem 0.36rem;
+  display: grid;
+  gap: 0.1rem;
+  justify-items: center;
+}
+
+.countdown-value {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: clamp(1.45rem, 2.6vw, 2.05rem);
+  line-height: 1;
+  color: #f5f8ff;
+}
+
+.countdown-label {
+  font-size: 0.78rem;
+  color: rgba(235, 242, 255, 0.78);
+  letter-spacing: 0.04em;
 }
 
 .weekend-event-board {
@@ -1268,11 +1304,11 @@ body.is-loading .loading-skeleton {
 }
 
 .race-countdown-xl {
-  margin: 0.2rem 0;
+  margin: 0.45rem 0 0.12rem;
   font-family: "Barlow Condensed", sans-serif;
   letter-spacing: 0.02em;
   line-height: 1;
-  font-size: clamp(2.15rem, 4.8vw, 3.5rem);
+  font-size: clamp(1.2rem, 2.3vw, 1.5rem);
 }
 
 .upcoming-race-actions {
@@ -1797,6 +1833,14 @@ body[data-module="nba"] .live-hud {
   .priority-strip {
     display: flex;
     flex-direction: column;
+  }
+
+  .weekend-hero-top {
+    grid-template-columns: 1fr;
+  }
+
+  .countdown-rack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .weekend-session-grid {
