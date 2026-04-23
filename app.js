@@ -1316,15 +1316,26 @@ function setupTrackViewOptions() {
 
 function setupEventListToggle() {
   const button = qs("#toggleEventListBtn");
-  const panel = qs("#eventListPanel");
-  if (!button || !panel) {
+  const modal = qs("#eventListModal");
+  const closeBtn = qs("#closeEventListModal");
+  if (!button || !modal || !closeBtn) {
     return;
   }
 
   button.onclick = () => {
-    const isHidden = panel.classList.toggle("hidden");
-    button.textContent = isHidden ? "See Full F1 Even List" : "Hide Full F1 Even List";
+    modal.classList.remove("hidden");
     triggerMicroFeedback();
+  };
+
+  closeBtn.onclick = () => {
+    modal.classList.add("hidden");
+    triggerMicroFeedback();
+  };
+
+  modal.onclick = (event) => {
+    if (event.target === modal) {
+      modal.classList.add("hidden");
+    }
   };
 }
 
@@ -2238,7 +2249,7 @@ function renderF1Skeleton() {
   grid.innerHTML = `
     <section class="top-duo">
       <article class="glass-card card-entry next-race-card">
-        <h3 class="card-title">Next F1 Event Weekend <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+        <h3 class="card-title">Next F1 Event Weekend <span class="card-title-actions"><span class="inline-meta" id="raceMeta">Syncing...</span><button id="toggleEventListBtn" class="small-btn" type="button">See Full F1 Even List</button></span></h3>
         <div class="weekend-hero">
           <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
           <strong id="nextRaceName">Grand Prix loading...</strong>
@@ -2264,16 +2275,6 @@ function renderF1Skeleton() {
         </div>
         <div id="weekendEventBoard" class="weekend-event-board">
           <p class="empty-state">Loading weekend sessions...</p>
-        </div>
-        <div class="event-list-toggle-wrap">
-          <button id="toggleEventListBtn" class="small-btn" type="button">See Full F1 Even List</button>
-        </div>
-        <div id="eventListPanel" class="integrated-roadmap hidden">
-          <h4 class="event-list-title">Season Roadmap</h4>
-          <div id="seasonCalendarStrip" class="season-calendar-strip">
-            <p class="empty-state">Loading season roadmap...</p>
-          </div>
-          <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
         </div>
         <div class="upcoming-race-actions quick-actions">
           <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
@@ -2374,6 +2375,21 @@ function renderF1Skeleton() {
           <button id="closeCircuitMapModal" class="small-btn">Close</button>
         </div>
         <div id="raceMapModal"></div>
+      </div>
+    </div>
+
+    <div id="eventListModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Full Formula 1 event list">
+      <div class="map-modal-card glass-card event-list-modal-card">
+        <div class="map-modal-head">
+          <h3 class="card-title" style="margin:0;">Full F1 Event List</h3>
+          <button id="closeEventListModal" class="small-btn">Close</button>
+        </div>
+        <div class="integrated-roadmap modal-roadmap">
+          <div id="seasonCalendarStrip" class="season-calendar-strip">
+            <p class="empty-state">Loading season roadmap...</p>
+          </div>
+          <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
+        </div>
       </div>
     </div>
   `;

@@ -467,6 +467,17 @@ body.is-loading .loading-skeleton {
   margin-top: 0.6rem;
 }
 
+.card-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.card-title-actions .small-btn {
+  padding: 0.35rem 0.58rem;
+  font-size: 0.72rem;
+}
+
 .integrated-roadmap {
   margin-top: 0.62rem;
   border: 1px solid var(--line-soft);
@@ -481,6 +492,16 @@ body.is-loading .loading-skeleton {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 0.98rem;
+}
+
+.event-list-modal-card {
+  width: min(1020px, 95vw);
+  max-height: 84vh;
+  overflow: auto;
+}
+
+.modal-roadmap {
+  margin-top: 0;
 }
 
 .priority-card {
@@ -2017,6 +2038,12 @@ body[data-module="nba"] .live-hud {
   .standings-compare-row {
     display: flex;
     flex-direction: column;
+  }
+
+  .card-title-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .countdown-rack {
