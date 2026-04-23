@@ -401,6 +401,15 @@ function weatherIconFromSummary(summary) {
   return "☀️";
 }
 
+function updateHudTicker(items = []) {
+  const ticker = qs("#hudTicker");
+  if (!ticker) {
+    return;
+  }
+  const rows = (items || []).map((item) => String(item || "").trim()).filter(Boolean);
+  ticker.textContent = rows.length ? rows.join("  •  ") : "Syncing race intelligence...";
+}
+
 function updateLiveHUD({
   raceName = "No race loaded",
   country = "",
@@ -408,7 +417,8 @@ function updateLiveHUD({
   countdown = "--",
   weather = "Loading...",
   seasonCompleted = 0,
-  seasonTotal = 0
+  seasonTotal = 0,
+  tickerItems = null
 }) {
   const hudRaceName = qs("#hudRaceName");
   const hudRaceFlag = qs("#hudRaceFlag");
@@ -439,6 +449,15 @@ function updateLiveHUD({
   const pct = seasonTotal > 0 ? Math.min(100, Math.max(0, (seasonCompleted / seasonTotal) * 100)) : 0;
   hudSeasonProgress.style.width = `${pct}%`;
   hudSeasonText.textContent = `${seasonCompleted} / ${seasonTotal} rounds`;
+
+  const fallbackTicker = [
+    raceName,
+    `Local ${localTime}`,
+    `Countdown ${countdown}`,
+    `Weather ${weather}`,
+    `Season ${seasonCompleted}/${seasonTotal}`
+  ];
+  updateHudTicker(Array.isArray(tickerItems) ? tickerItems : fallbackTicker);
 }
 
 function setHeaderMeta() {
@@ -1899,7 +1918,8 @@ async function renderF1() {
     countdown: "Loading...",
     weather: "Loading...",
     seasonCompleted: 0,
-    seasonTotal: 0
+    seasonTotal: 0,
+    tickerItems: ["Connecting race data", "Loading standings", "Preparing cockpit"]
   });
 
   try {
@@ -1974,6 +1994,11 @@ async function renderF1() {
     renderPaddockQuiz(racePhase.label);
     renderTelemetryFeed(nextRace, racePhase.label);
 
+    const leader = drivers[0];
+    const second = drivers[1];
+    const leaderName = leader ? `${leader.Driver.givenName} ${leader.Driver.familyName}` : "No leader";
+    const pointsGap = leader && second ? `${toNum(leader.points) - toNum(second.points)} pts` : "Gap unavailable";
+
     const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
     const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
     const seasonSummary = await fetchSeasonSummary(trajectory.labels.length);
@@ -1990,7 +2015,14 @@ async function renderF1() {
       countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
       weather: weatherSummary,
       seasonCompleted: seasonSummary.completed,
-      seasonTotal: seasonSummary.totalRounds
+      seasonTotal: seasonSummary.totalRounds,
+      tickerItems: [
+        `${nextRace?.raceName || "Next race TBD"} • ${nextRace?.Circuit?.circuitName || "Circuit pending"}`,
+        `Leader ${leaderName}`,
+        `Championship gap ${pointsGap}`,
+        `${racePhase.label} • ${racePhase.detail}`,
+        `Local start ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`
+      ]
     });
 
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
@@ -2098,7 +2130,8 @@ async function renderF1() {
       countdown: "Unavailable",
       weather: "Unavailable",
       seasonCompleted: 0,
-      seasonTotal: 0
+      seasonTotal: 0,
+      tickerItems: ["Race intelligence offline", "Retrying live services"]
     });
     qs("#dashboardGrid").innerHTML = `
       <article class="glass-card card-span-12">
