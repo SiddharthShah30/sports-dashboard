@@ -1426,8 +1426,8 @@ function setupGridMapLauncher(lat, lon, circuitName) {
   const canOpenMap = Number.isFinite(Number(lat)) && Number.isFinite(Number(lon));
   if (openHint) {
     openHint.textContent = canOpenMap
-      ? "Latest starting grid. Click any slot to open circuit location map."
-      : "Grid is available. Map location is unavailable for this race.";
+      ? "Latest grid. Click any slot for circuit map."
+      : "Grid available. Circuit map unavailable for this race.";
   }
 
   const openModal = () => {
