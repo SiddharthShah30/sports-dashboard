@@ -876,23 +876,49 @@ async function fetchDriverComparison(driverIdA, driverIdB) {
     const races = raceData?.MRData?.RaceTable?.Races || [];
     const grids = [];
     const finishes = [];
+    const points = [];
+    let wins = 0;
+    let podiums = 0;
+    let bestFinish = 99;
 
     races.forEach((race) => {
       const result = race.Results?.[0];
       if (!result) {
         return;
       }
-      grids.push(toNum(result.grid));
-      finishes.push(toNum(result.position));
+      const gridPos = toNum(result.grid);
+      const finishPos = toNum(result.position);
+      const pts = toNum(result.points);
+      grids.push(gridPos);
+      finishes.push(finishPos);
+      points.push(pts);
+      if (finishPos === 1) {
+        wins += 1;
+      }
+      if (finishPos > 0 && finishPos <= 3) {
+        podiums += 1;
+      }
+      if (finishPos > 0) {
+        bestFinish = Math.min(bestFinish, finishPos);
+      }
     });
 
     const avgGrid = grids.length ? grids.reduce((a, b) => a + b, 0) / grids.length : 0;
     const avgFinish = finishes.length ? finishes.reduce((a, b) => a + b, 0) / finishes.length : 0;
+    const avgPoints = points.length ? points.reduce((a, b) => a + b, 0) / points.length : 0;
+    const top10Rate = finishes.length
+      ? (finishes.filter((value) => value > 0 && value <= 10).length / finishes.length) * 100
+      : 0;
 
     return {
       rounds: races.length,
       avgGrid: avgGrid.toFixed(2),
-      avgFinish: avgFinish.toFixed(2)
+      avgFinish: avgFinish.toFixed(2),
+      avgPoints: avgPoints.toFixed(2),
+      wins,
+      podiums,
+      bestFinish: Number.isFinite(bestFinish) && bestFinish !== 99 ? `P${bestFinish}` : "-",
+      top10Rate: `${top10Rate.toFixed(1)}%`
     };
   }
 
@@ -1040,14 +1066,17 @@ function renderStartingGridLayout(qualifyingRows, resultRows) {
 
     const laneIndex = (pos - 1) / 2 + 1;
 
+    const leftDelay = ((pos - 1) * 35).toFixed(0);
+    const rightDelay = (pos * 35).toFixed(0);
+
     rows.push(`
       <div class="grid-row ${laneIndex % 2 === 0 ? "lane-even" : "lane-odd"}">
-        <button class="grid-slot lane-left" style="--team-color:${escapeHtml(leftColor)}" data-open-map="true" data-grid-pos="${pos}" aria-label="Open circuit map from grid row ${pos}">
+        <button class="grid-slot lane-left" style="--team-color:${escapeHtml(leftColor)};--grid-delay:${leftDelay}ms" data-open-map="true" data-grid-pos="${pos}" aria-label="Open circuit map from grid row ${pos}">
           <span class="grid-pos">P${pos}</span>
           <span class="grid-code">${escapeHtml(leftCode)}</span>
           <span class="grid-name">${escapeHtml(leftName)}</span>
         </button>
-        <button class="grid-slot lane-right" style="--team-color:${escapeHtml(rightColor)}" data-open-map="true" data-grid-pos="${pos + 1}" aria-label="Open circuit map from grid row ${pos + 1}">
+        <button class="grid-slot lane-right" style="--team-color:${escapeHtml(rightColor)};--grid-delay:${rightDelay}ms" data-open-map="true" data-grid-pos="${pos + 1}" aria-label="Open circuit map from grid row ${pos + 1}">
           <span class="grid-pos">P${pos + 1}</span>
           <span class="grid-code">${escapeHtml(rightCode)}</span>
           <span class="grid-name">${escapeHtml(rightName)}</span>
@@ -1209,34 +1238,7 @@ function renderMiniStandingsRows(rows, type) {
   `;
 }
 
-function renderBreakingNews(newsItems) {
-  const ticker = qs("#breakingTicker");
-  const rail = qs("#headlineRail");
-  if (!ticker || !rail) {
-    return;
-  }
-
-  if (!newsItems.length) {
-    ticker.textContent = "No live headlines available right now.";
-    rail.innerHTML = "<p class='empty-state'>Headlines unavailable.</p>";
-    return;
-  }
-
-  ticker.textContent = newsItems.map((item) => item.title).join("  |  ");
-  rail.innerHTML = newsItems
-    .slice(0, 3)
-    .map(
-      (item) => `
-      <a class="headline-card" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">
-        <p class="kicker">${escapeHtml(item.source)}</p>
-        <strong>${escapeHtml(item.title)}</strong>
-      </a>
-    `
-    )
-    .join("");
-}
-
-function renderTelemetryFeed(newsItems, nextRace) {
+function renderTelemetryFeed(nextRace, racePhaseLabel) {
   const feed = qs("#telemetryFeed");
   if (!feed) {
     return;
@@ -1244,11 +1246,25 @@ function renderTelemetryFeed(newsItems, nextRace) {
 
   const vegasStatus = `Las Vegas GP Watch: ${nextRace?.raceName?.toLowerCase().includes("vegas") ? "Race weekend active in schedule" : "Monitoring schedule and paddock updates"}`;
   const nowStamp = new Date().toISOString().replace("T", " ").slice(0, 16);
+  const telemetryRows = [
+    {
+      tag: "Race State",
+      message: `${racePhaseLabel || "SCHEDULE"} • ${nextRace?.raceName || "Awaiting race allocation"}`
+    },
+    {
+      tag: "Circuit",
+      message: `${nextRace?.Circuit?.circuitName || "Circuit pending"} • ${nextRace?.Circuit?.Location?.locality || "Location pending"}`
+    },
+    {
+      tag: "Intel",
+      message: vegasStatus
+    }
+  ];
 
-  const headlineRows = newsItems.slice(0, 3).map((item) => `
+  const rowHtml = telemetryRows.map((item) => `
     <div class="telemetry-item">
-      <span>${escapeHtml(item.source)}</span>
-      <strong>${escapeHtml(item.title)}</strong>
+      <span>${escapeHtml(item.tag)}</span>
+      <strong>${escapeHtml(item.message)}</strong>
     </div>
   `).join("");
 
@@ -1257,7 +1273,7 @@ function renderTelemetryFeed(newsItems, nextRace) {
       <span>Telemetry ${nowStamp} UTC</span>
       <strong>${escapeHtml(vegasStatus)}</strong>
     </div>
-    ${headlineRows || "<p class='empty-state'>No paddock headlines right now.</p>"}
+    ${rowHtml}
   `;
 }
 
@@ -1600,6 +1616,8 @@ function setupHeadToHeadEvents() {
 
     try {
       const metrics = await fetchDriverComparison(aSelect.value, bSelect.value);
+      const paceWinner = toNum(metrics.a.avgFinish) < toNum(metrics.b.avgFinish) ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
+      const pointsWinner = toNum(metrics.a.avgPoints) > toNum(metrics.b.avgPoints) ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
       output.innerHTML = `
         <div class="compare-grid card-entry">
           <div class="compare-cell">
@@ -1607,14 +1625,23 @@ function setupHeadToHeadEvents() {
             <p>Rounds: ${metrics.a.rounds}</p>
             <p>Avg Grid: ${metrics.a.avgGrid}</p>
             <p>Avg Finish: ${metrics.a.avgFinish}</p>
+            <p>Avg Points: ${metrics.a.avgPoints}</p>
+            <p>Wins/Podiums: ${metrics.a.wins}/${metrics.a.podiums}</p>
+            <p>Best Finish: ${metrics.a.bestFinish}</p>
+            <p>Top-10 Rate: ${metrics.a.top10Rate}</p>
           </div>
           <div class="compare-cell">
             <strong>${bSelect.value.toUpperCase()}</strong>
             <p>Rounds: ${metrics.b.rounds}</p>
             <p>Avg Grid: ${metrics.b.avgGrid}</p>
             <p>Avg Finish: ${metrics.b.avgFinish}</p>
+            <p>Avg Points: ${metrics.b.avgPoints}</p>
+            <p>Wins/Podiums: ${metrics.b.wins}/${metrics.b.podiums}</p>
+            <p>Best Finish: ${metrics.b.bestFinish}</p>
+            <p>Top-10 Rate: ${metrics.b.top10Rate}</p>
           </div>
         </div>
+        <p class="inline-meta">Pace edge: ${paceWinner} | Points consistency: ${pointsWinner}</p>
       `;
     } catch (error) {
       output.innerHTML = "<p class='empty-state'>Comparison failed. Try another pair.</p>";
@@ -1674,41 +1701,6 @@ async function fetchSeasonSummary(roundsCompleted) {
     completed,
     remaining: Math.max(0, totalRounds - completed)
   };
-}
-
-async function fetchLatestNews() {
-  try {
-    const payload = await fetchJSON("https://www.reddit.com/r/formula1/new.json?limit=6");
-    const posts = payload?.data?.children?.map((entry) => entry?.data).filter(Boolean) || [];
-    return posts.slice(0, 6).map((post) => ({
-      title: post.title,
-      url: `https://www.reddit.com${post.permalink}`,
-      source: "r/formula1"
-    }));
-  } catch (error) {
-    return [];
-  }
-}
-
-function renderNewsList(newsItems) {
-  const container = qs("#newsList");
-  if (!container) {
-    return;
-  }
-  if (!newsItems.length) {
-    container.innerHTML = "<p class='empty-state'>News feed unavailable right now.</p>";
-    return;
-  }
-  container.innerHTML = newsItems
-    .map(
-      (item) => `
-      <a class="news-item" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">
-        <strong>${escapeHtml(item.title)}</strong>
-        <span>${escapeHtml(item.source)}</span>
-      </a>
-    `
-    )
-    .join("");
 }
 
 function setupResetButton() {
@@ -1794,8 +1786,31 @@ function renderF1Skeleton() {
   const grid = qs("#dashboardGrid");
   grid.classList.add("f1-layout");
   grid.innerHTML = `
+    <section class="priority-strip">
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
+        <div id="racePredictionPanel">
+          <p class="empty-state">Calculating probabilities...</p>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Current Standing</h3>
+        <div id="driverStandings" class="data-list"></div>
+        <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
+      </article>
+
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Driver Profile</h3>
+        <div id="profileStats" class="stats-row"></div>
+        <div style="height: 180px; margin-top: 1rem;">
+          <canvas id="trajectoryChart"></canvas>
+        </div>
+      </article>
+    </section>
+
     <section class="layout-main">
-      <article class="glass-card card-entry active-live-center">
+      <article class="glass-card card-entry active-live-center race-intel-card">
         <h3 class="card-title">Live Race Intel <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
         <div class="live-state-wrap">
           <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
@@ -1813,8 +1828,11 @@ function renderF1Skeleton() {
         </div>
       </article>
 
-      <article class="glass-card card-entry">
-        <h3 class="card-title">Track & Starting Grid</h3>
+      <article class="glass-card card-entry track-grid-card">
+        <h3 class="card-title">Track & Starting Grid <span class="inline-meta" id="gridLaunchHint">Grid animation preparing...</span></h3>
+        <div class="start-lights" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
         <div class="race-center-stack two-up">
           <div>
             <p class="inline-meta" id="trackLayoutHint">Circuit Geometry</p>
@@ -1838,64 +1856,23 @@ function renderF1Skeleton() {
         </div>
         <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
       </article>
-    </section>
-
-    <aside class="layout-side">
-      <article class="glass-card card-entry">
-        <h3 class="card-title">Driver Profile</h3>
-        <div id="profileStats" class="stats-row"></div>
-        <div style="height: 180px; margin-top: 1rem;">
-          <canvas id="trajectoryChart"></canvas>
-        </div>
-      </article>
 
       <article class="glass-card card-entry">
-        <h3 class="card-title">Current Standings</h3>
-        <div id="driverStandings" class="data-list"></div>
-        <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
-      </article>
-
-      <article class="glass-card card-entry">
-        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
-        <div id="racePredictionPanel">
-          <p class="empty-state">Calculating probabilities...</p>
-        </div>
-      </article>
-    </aside>
-
-    <section class="layout-bottom bottom-grid">
-      <article class="glass-card card-entry" style="grid-column: span 8;">
-        <h3 class="card-title">Season Standing <span class="inline-meta">Drivers, constructors, and paddock focus</span></h3>
-        <div id="stickyDataGrid" class="sticky-data-grid">
-          <p class="empty-state">Loading standings snapshot...</p>
-        </div>
-      </article>
-
-      <article class="glass-card card-entry" style="grid-column: span 4;">
         <h3 class="card-title">Head-to-Head</h3>
         <div class="split" style="margin-bottom:0.5rem;">
           <select id="driverA" class="select-input"></select>
           <select id="driverB" class="select-input"></select>
         </div>
         <button id="compareBtn" class="small-btn" style="width:100%">Compare Pace</button>
-        <div id="comparisonResult"></div>
+        <div id="comparisonResult" style="margin-top:0.65rem;"></div>
       </article>
+    </section>
 
+    <section class="layout-bottom bottom-grid">
       <article class="glass-card card-entry" style="grid-column: span 12;">
-        <h3 class="card-title">Formula 1 Live Center <span class="inline-meta">Breaking updates</span></h3>
-        <div class="breaking-ticker-wrap">
-          <span class="live-dot"></span>
-          <div id="breakingTicker" class="breaking-ticker">Loading headlines...</div>
-        </div>
-        <div id="headlineRail" class="headline-rail">
-          <p class="empty-state">Loading feature cards...</p>
-        </div>
-      </article>
-
-      <article class="glass-card card-entry" style="grid-column: span 12;">
-        <h3 class="card-title">Latest News</h3>
-        <div id="newsList" class="news-list">
-          <p class="empty-state">Loading latest updates...</p>
+        <h3 class="card-title">Season Standing <span class="inline-meta">Drivers, constructors, and paddock focus</span></h3>
+        <div id="stickyDataGrid" class="sticky-data-grid">
+          <p class="empty-state">Loading standings snapshot...</p>
         </div>
       </article>
 
@@ -1995,6 +1972,7 @@ async function renderF1() {
       raceStateDetail.textContent = racePhase.detail;
     }
     renderPaddockQuiz(racePhase.label);
+    renderTelemetryFeed(nextRace, racePhase.label);
 
     const selectedDriver = drivers.find((entry) => entry.Driver.driverId === state.f1.selectedDriverId) || drivers[0];
     const trajectory = await fetchDriverTrajectory(selectedDriver.Driver.driverId);
@@ -2110,11 +2088,6 @@ async function renderF1() {
 
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
 
-    const newsItems = await fetchLatestNews();
-    state.f1.lastNewsItems = newsItems;
-    renderBreakingNews(newsItems);
-    renderTelemetryFeed(newsItems, nextRace);
-    renderNewsList(newsItems);
     renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
     console.error("renderF1 failed", error);
