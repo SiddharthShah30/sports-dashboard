@@ -1314,6 +1314,20 @@ function setupTrackViewOptions() {
   activate("circuit");
 }
 
+function setupEventListToggle() {
+  const button = qs("#toggleEventListBtn");
+  const panel = qs("#eventListPanel");
+  if (!button || !panel) {
+    return;
+  }
+
+  button.onclick = () => {
+    const isHidden = panel.classList.toggle("hidden");
+    button.textContent = isHidden ? "See Full F1 Even List" : "Hide Full F1 Even List";
+    triggerMicroFeedback();
+  };
+}
+
 function highlightGridPosition(position) {
   const pos = toNum(position);
   if (!pos) {
@@ -2201,6 +2215,16 @@ function renderF1Skeleton() {
         <div id="weekendEventBoard" class="weekend-event-board">
           <p class="empty-state">Loading weekend sessions...</p>
         </div>
+        <div class="event-list-toggle-wrap">
+          <button id="toggleEventListBtn" class="small-btn" type="button">See Full F1 Even List</button>
+        </div>
+        <div id="eventListPanel" class="integrated-roadmap hidden">
+          <h4 class="event-list-title">Season Roadmap</h4>
+          <div id="seasonCalendarStrip" class="season-calendar-strip">
+            <p class="empty-state">Loading season roadmap...</p>
+          </div>
+          <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
+        </div>
         <div class="upcoming-race-actions quick-actions">
           <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
           <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
@@ -2244,7 +2268,7 @@ function renderF1Skeleton() {
       </article>
     </section>
 
-    <section class="priority-strip">
+    <section class="insight-strip">
       <article class="glass-card card-entry priority-card">
         <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
         <div id="racePredictionPanel">
@@ -2252,6 +2276,16 @@ function renderF1Skeleton() {
         </div>
       </article>
 
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Supporting Driver and Team</h3>
+        <div id="profileStats" class="stats-row"></div>
+        <div style="height: 180px; margin-top: 1rem;">
+          <canvas id="trajectoryChart"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="standings-compare-row">
       <article class="glass-card card-entry priority-card current-standing-card">
         <h3 class="card-title">Current Standing</h3>
         <div class="standings-switch" role="tablist" aria-label="Standings views">
@@ -2276,24 +2310,6 @@ function renderF1Skeleton() {
             <p class="empty-state">Loading standings snapshot...</p>
           </div>
         </div>
-      </article>
-
-      <article class="glass-card card-entry priority-card">
-        <h3 class="card-title">Supporting Driver and Team</h3>
-        <div id="profileStats" class="stats-row"></div>
-        <div style="height: 180px; margin-top: 1rem;">
-          <canvas id="trajectoryChart"></canvas>
-        </div>
-      </article>
-    </section>
-
-    <section class="layout-main">
-      <article class="glass-card card-entry season-roadmap-card">
-        <h3 class="card-title">Season Roadmap</h3>
-        <div id="seasonCalendarStrip" class="season-calendar-strip">
-          <p class="empty-state">Loading season roadmap...</p>
-        </div>
-        <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
       </article>
 
       <article class="glass-card card-entry">
@@ -2444,6 +2460,7 @@ async function renderF1() {
 
     renderSeasonCalendar(seasonCalendar);
     setupSeasonCalendarEvents(seasonCalendar);
+    setupEventListToggle();
 
     renderGridAfterQualifying(nextRace, lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);

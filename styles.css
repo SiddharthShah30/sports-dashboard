@@ -454,6 +454,35 @@ body.is-loading .loading-skeleton {
   min-width: 0;
 }
 
+.insight-strip,
+.standings-compare-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.2rem;
+  margin-bottom: 1.2rem;
+  min-width: 0;
+}
+
+.event-list-toggle-wrap {
+  margin-top: 0.6rem;
+}
+
+.integrated-roadmap {
+  margin-top: 0.62rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.62rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.event-list-title {
+  margin: 0 0 0.45rem;
+  font-family: "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.98rem;
+}
+
 .priority-card {
   min-height: 290px;
   height: 100%;
@@ -1055,7 +1084,9 @@ body.is-loading .loading-skeleton {
 }
 
 @media (max-width: 1280px) {
-  .priority-strip {
+  .priority-strip,
+  .insight-strip,
+  .standings-compare-row {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
@@ -1936,7 +1967,9 @@ body[data-module="nba"] .live-hud {
   }
 
   .top-duo,
-  .priority-strip {
+  .priority-strip,
+  .insight-strip,
+  .standings-compare-row {
     display: flex;
     flex-direction: column;
   }
