@@ -2002,23 +2002,48 @@ function setupDriverListEvents() {
 
 function setupHeadToHeadEvents() {
   const compareBtn = qs("#compareBtn");
+  const swapBtn = qs("#swapCompareBtn");
+  const autoToggle = qs("#autoCompareToggle");
   const aSelect = qs("#driverA");
   const bSelect = qs("#driverB");
+  const highlights = qs("#comparisonHighlights");
   const output = qs("#comparisonResult");
 
-  if (!compareBtn || !aSelect || !bSelect || !output) {
+  if (!compareBtn || !aSelect || !bSelect || !output || !highlights) {
     return;
   }
 
-  compareBtn.addEventListener("click", async () => {
+  const runCompare = async () => {
+    if (!aSelect.value || !bSelect.value || aSelect.value === bSelect.value) {
+      output.innerHTML = "<p class='empty-state'>Choose two different drivers for comparison.</p>";
+      highlights.innerHTML = "";
+      return;
+    }
+
     triggerMicroFeedback();
     output.innerHTML = "<p class='empty-state'>Comparing pace and finish metrics...</p>";
+    highlights.innerHTML = "";
 
     try {
       const metrics = await fetchDriverComparison(aSelect.value, bSelect.value);
       const paceWinner = toNum(metrics.a.avgFinish) < toNum(metrics.b.avgFinish) ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
       const pointsWinner = toNum(metrics.a.avgPoints) > toNum(metrics.b.avgPoints) ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
+      const consistencyWinner = toNum(metrics.a.top10Rate) > toNum(metrics.b.top10Rate) ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
+      const aggressionA = (toNum(metrics.a.wins) * 3) + toNum(metrics.a.podiums);
+      const aggressionB = (toNum(metrics.b.wins) * 3) + toNum(metrics.b.podiums);
+      const attackWinner = aggressionA >= aggressionB ? aSelect.value.toUpperCase() : bSelect.value.toUpperCase();
+      const aName = aSelect.options[aSelect.selectedIndex]?.textContent || aSelect.value.toUpperCase();
+      const bName = bSelect.options[bSelect.selectedIndex]?.textContent || bSelect.value.toUpperCase();
+
+      highlights.innerHTML = `
+        <div class="compare-chip"><span>Pace Edge</span><strong>${escapeHtml(paceWinner)}</strong></div>
+        <div class="compare-chip"><span>Points Form</span><strong>${escapeHtml(pointsWinner)}</strong></div>
+        <div class="compare-chip"><span>Top-10 Consistency</span><strong>${escapeHtml(consistencyWinner)}</strong></div>
+        <div class="compare-chip"><span>Racecraft Index</span><strong>${escapeHtml(attackWinner)}</strong></div>
+      `;
+
       output.innerHTML = `
+        <p class="inline-meta">${escapeHtml(aName)} vs ${escapeHtml(bName)} • season-wide metrics</p>
         <div class="compare-grid card-entry">
           <div class="compare-cell">
             <strong>${aSelect.value.toUpperCase()}</strong>
@@ -2041,12 +2066,37 @@ function setupHeadToHeadEvents() {
             <p>Top-10 Rate: ${metrics.b.top10Rate}</p>
           </div>
         </div>
-        <p class="inline-meta">Pace edge: ${paceWinner} | Points consistency: ${pointsWinner}</p>
+        <p class="inline-meta">Pace edge: ${paceWinner} | Points consistency: ${pointsWinner} | Top-10 consistency: ${consistencyWinner}</p>
       `;
     } catch (error) {
+      highlights.innerHTML = "";
       output.innerHTML = "<p class='empty-state'>Comparison failed. Try another pair.</p>";
     }
-  });
+  };
+
+  compareBtn.onclick = runCompare;
+
+  if (swapBtn) {
+    swapBtn.onclick = () => {
+      const currentA = aSelect.value;
+      aSelect.value = bSelect.value;
+      bSelect.value = currentA;
+      triggerMicroFeedback();
+      if (autoToggle?.checked) {
+        runCompare();
+      }
+    };
+  }
+
+  const onSelectionChange = () => {
+    if (autoToggle?.checked) {
+      runCompare();
+    }
+  };
+  aSelect.onchange = onSelectionChange;
+  bSelect.onchange = onSelectionChange;
+
+  runCompare();
 }
 
 function setupPreferenceControls(drivers, constructors) {
@@ -2299,17 +2349,6 @@ function renderF1Skeleton() {
         <div id="constructorStandingsPanel" class="standings-pane hidden">
           <div id="constructorBars"></div>
         </div>
-        <div class="season-standing-mini">
-          <p class="kicker">Season Standing</p>
-          <div class="season-standing-tabs" role="tablist" aria-label="Season standing views">
-            <button id="seasonStandingOverviewTab" class="small-btn" type="button">Overview</button>
-            <button id="seasonStandingDriversTab" class="small-btn" type="button">Drivers</button>
-            <button id="seasonStandingConstructorsTab" class="small-btn" type="button">Constructors</button>
-          </div>
-          <div id="stickyDataGrid" class="sticky-data-grid">
-            <p class="empty-state">Loading standings snapshot...</p>
-          </div>
-        </div>
       </article>
 
       <article class="glass-card card-entry">
@@ -2318,7 +2357,12 @@ function renderF1Skeleton() {
           <select id="driverA" class="select-input"></select>
           <select id="driverB" class="select-input"></select>
         </div>
+        <div class="headtohead-tools">
+          <button id="swapCompareBtn" class="small-btn" type="button">Swap Drivers</button>
+          <label class="headtohead-auto"><input id="autoCompareToggle" type="checkbox" checked /> Auto compare</label>
+        </div>
         <button id="compareBtn" class="small-btn" style="width:100%">Compare Pace</button>
+        <div id="comparisonHighlights" class="comparison-highlights"></div>
         <div id="comparisonResult" style="margin-top:0.65rem;"></div>
       </article>
     </section>
@@ -2549,8 +2593,6 @@ async function renderF1() {
     );
 
     upsertTrajectoryChart(trajectory.labels, trajectory.values);
-
-    renderFooterGrid(drivers, constructors, selectedDriver, nextRace);
   } catch (error) {
     console.error("renderF1 failed", error);
     const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown error";

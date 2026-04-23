@@ -1589,6 +1589,51 @@ body.is-loading .loading-skeleton {
   gap: 0.76rem;
 }
 
+.headtohead-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.headtohead-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-1);
+  font-size: 0.82rem;
+}
+
+.comparison-highlights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+}
+
+.compare-chip {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.44rem 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.compare-chip span {
+  color: var(--text-2);
+  font-size: 0.76rem;
+}
+
+.compare-chip strong {
+  color: var(--text-0);
+  font-family: "Barlow Condensed", sans-serif;
+  letter-spacing: 0.02em;
+}
+
 .select-input {
   width: 100%;
   border-radius: 10px;
@@ -2020,6 +2065,15 @@ body[data-module="nba"] .live-hud {
   .compare-grid,
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .comparison-highlights {
+    grid-template-columns: 1fr;
+  }
+
+  .headtohead-tools {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .data-list {
