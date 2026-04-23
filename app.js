@@ -45,6 +45,7 @@ const state = {
     lastNewsItems: [],
     recentFormMap: {},
     recentFormRound: 0,
+    standingView: "drivers",
     quizIndex: 0,
     quizScore: 0
   }
@@ -1493,6 +1494,42 @@ function setupStandingsExpandControl() {
   };
 }
 
+function renderCurrentStandingView() {
+  const driverPane = qs("#driverStandingsPanel");
+  const constructorPane = qs("#constructorStandingsPanel");
+  const driverBtn = qs("#showDriverStandingsBtn");
+  const constructorBtn = qs("#showConstructorStandingsBtn");
+  if (!driverPane || !constructorPane || !driverBtn || !constructorBtn) {
+    return;
+  }
+
+  const showDrivers = state.f1.standingView !== "constructors";
+  driverPane.classList.toggle("hidden", !showDrivers);
+  constructorPane.classList.toggle("hidden", showDrivers);
+  driverBtn.classList.toggle("active", showDrivers);
+  constructorBtn.classList.toggle("active", !showDrivers);
+}
+
+function setupCurrentStandingToggle() {
+  const driverBtn = qs("#showDriverStandingsBtn");
+  const constructorBtn = qs("#showConstructorStandingsBtn");
+  if (!driverBtn || !constructorBtn) {
+    return;
+  }
+
+  driverBtn.onclick = () => {
+    state.f1.standingView = "drivers";
+    triggerMicroFeedback();
+    renderCurrentStandingView();
+  };
+
+  constructorBtn.onclick = () => {
+    state.f1.standingView = "constructors";
+    triggerMicroFeedback();
+    renderCurrentStandingView();
+  };
+}
+
 function renderPaddockQuiz(phaseLabel) {
   const wrap = qs("#paddockQuiz");
   const questionEl = qs("#quizQuestion");
@@ -1777,32 +1814,28 @@ function renderF1Skeleton() {
   const grid = qs("#dashboardGrid");
   grid.classList.add("f1-layout");
   grid.innerHTML = `
-    <section class="priority-strip">
-      <article class="glass-card card-entry priority-card">
-        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
-        <div id="racePredictionPanel">
-          <p class="empty-state">Calculating probabilities...</p>
+    <section class="top-duo">
+      <article class="glass-card card-entry next-race-card">
+        <h3 class="card-title">Next Race <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+        <div class="upcoming-race-grid">
+          <div class="upcoming-race-countdown">
+            <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
+            <strong id="nextRaceName">Grand Prix loading...</strong>
+            <p class="race-countdown-xl" id="nextRaceStart">--</p>
+            <p class="inline-meta" id="nextRaceWeather">Weather loading...</p>
+          </div>
+          <div class="season-calendar-detail next-race-meta" id="nextRaceMeta">
+            <p class="empty-state">Loading event details...</p>
+          </div>
+        </div>
+        <div class="upcoming-race-actions quick-actions">
+          <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
+          <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
         </div>
       </article>
 
-      <article class="glass-card card-entry priority-card">
-        <h3 class="card-title">Current Standing</h3>
-        <div id="driverStandings" class="data-list"></div>
-        <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
-      </article>
-
-      <article class="glass-card card-entry priority-card">
-        <h3 class="card-title">Driver Profile</h3>
-        <div id="profileStats" class="stats-row"></div>
-        <div style="height: 180px; margin-top: 1rem;">
-          <canvas id="trajectoryChart"></canvas>
-        </div>
-      </article>
-    </section>
-
-    <section class="layout-main">
-      <article class="glass-card card-entry active-live-center race-intel-card">
-        <h3 class="card-title">Live Race Intel <span class="inline-meta" id="raceMeta">Syncing...</span></h3>
+      <article class="glass-card card-entry track-grid-card">
+        <h3 class="card-title">Track & Starting Grid <span class="inline-meta" id="gridLaunchHint">Grid animation preparing...</span></h3>
         <div class="live-state-wrap">
           <span id="raceStateBadge" class="race-state-badge">SCHEDULE</span>
           <span id="raceStateDetail" class="inline-meta">Waiting for race timing</span>
@@ -1817,10 +1850,6 @@ function renderF1Skeleton() {
           <div id="quizOptions" class="quiz-options"></div>
           <p id="quizScore" class="inline-meta">Score: 0/0</p>
         </div>
-      </article>
-
-      <article class="glass-card card-entry track-grid-card">
-        <h3 class="card-title">Track & Starting Grid <span class="inline-meta" id="gridLaunchHint">Grid animation preparing...</span></h3>
         <div class="start-lights" aria-hidden="true">
           <span></span><span></span><span></span><span></span><span></span>
         </div>
@@ -1834,13 +1863,49 @@ function renderF1Skeleton() {
             <div id="latestGridLayout"></div>
           </div>
         </div>
-        <div class="upcoming-race-actions quick-actions">
-          <button id="setReminderBtn" class="small-btn" type="button">Set Reminder</button>
-          <button id="addCalendarBtn" class="small-btn" type="button">Add to Calendar</button>
+      </article>
+    </section>
+
+    <section class="priority-strip">
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Race Predictor <span class="inline-meta">AI Model</span></h3>
+        <div id="racePredictionPanel">
+          <p class="empty-state">Calculating probabilities...</p>
         </div>
       </article>
 
-      <article class="glass-card card-entry">
+      <article class="glass-card card-entry priority-card current-standing-card">
+        <h3 class="card-title">Current Standing</h3>
+        <div class="standings-switch" role="tablist" aria-label="Standings views">
+          <button id="showDriverStandingsBtn" class="small-btn" type="button">Driver Standing</button>
+          <button id="showConstructorStandingsBtn" class="small-btn" type="button">Constructor Standing</button>
+        </div>
+        <div id="driverStandingsPanel" class="standings-pane">
+          <div id="driverStandings" class="data-list"></div>
+          <button id="standingsExpandBtn" class="small-btn standings-expand-btn" type="button">Show More</button>
+        </div>
+        <div id="constructorStandingsPanel" class="standings-pane hidden">
+          <div id="constructorBars"></div>
+        </div>
+        <div class="season-standing-mini">
+          <p class="kicker">Season Standing</p>
+          <div id="stickyDataGrid" class="sticky-data-grid">
+            <p class="empty-state">Loading standings snapshot...</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="glass-card card-entry priority-card">
+        <h3 class="card-title">Supporting Driver and Team</h3>
+        <div id="profileStats" class="stats-row"></div>
+        <div style="height: 180px; margin-top: 1rem;">
+          <canvas id="trajectoryChart"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <section class="layout-main">
+      <article class="glass-card card-entry season-roadmap-card">
         <h3 class="card-title">Season Roadmap</h3>
         <div id="seasonCalendarStrip" class="season-calendar-strip">
           <p class="empty-state">Loading season roadmap...</p>
@@ -1859,24 +1924,15 @@ function renderF1Skeleton() {
       </article>
     </section>
 
-    <section class="layout-bottom bottom-grid">
-      <article class="glass-card card-entry" style="grid-column: span 12;">
-        <h3 class="card-title">Season Standing <span class="inline-meta">Drivers, constructors, and paddock focus</span></h3>
-        <div id="stickyDataGrid" class="sticky-data-grid">
-          <p class="empty-state">Loading standings snapshot...</p>
+    <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
+      <div class="map-modal-card glass-card">
+        <div class="map-modal-head">
+          <h3 class="card-title" style="margin:0;">Circuit Location Map</h3>
+          <button id="closeCircuitMapModal" class="small-btn">Close</button>
         </div>
-      </article>
-
-      <div id="circuitMapModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Circuit location map">
-        <div class="map-modal-card glass-card">
-          <div class="map-modal-head">
-            <h3 class="card-title" style="margin:0;">Circuit Location Map</h3>
-            <button id="closeCircuitMapModal" class="small-btn">Close</button>
-          </div>
-          <div id="raceMapModal"></div>
-        </div>
+        <div id="raceMapModal"></div>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -1939,6 +1995,27 @@ async function renderF1() {
         ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
         : "No race scheduled";
     }
+    const nextRaceNameEl = qs("#nextRaceName");
+    if (nextRaceNameEl) {
+      nextRaceNameEl.textContent = nextRace?.raceName || "No race scheduled";
+    }
+    const nextRaceCircuitEl = qs("#nextRaceCircuit");
+    if (nextRaceCircuitEl) {
+      nextRaceCircuitEl.textContent = nextRace?.Circuit?.circuitName || "Circuit TBD";
+    }
+    const nextRaceStartEl = qs("#nextRaceStart");
+    if (nextRaceStartEl) {
+      nextRaceStartEl.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel}`;
+    }
+    const nextRaceMetaEl = qs("#nextRaceMeta");
+    if (nextRaceMetaEl) {
+      const country = nextRace?.Circuit?.Location?.country || "Country TBD";
+      nextRaceMetaEl.innerHTML = `
+        <p><strong>${escapeHtml(country)}</strong></p>
+        <p>Timezone: ${escapeHtml(raceTimeMode.zoneLabel)}</p>
+        <p>Session Mode: ${escapeHtml(timezoneLabel(state.timezone))}</p>
+      `;
+    }
 
     const racePhase = getRacePhase(nextRace);
     const raceStateBadge = qs("#raceStateBadge");
@@ -1967,6 +2044,10 @@ async function renderF1() {
     const lat = nextRace?.Circuit?.Location?.lat;
     const lon = nextRace?.Circuit?.Location?.long;
     const weatherSummary = await fetchTrackWeather(lat, lon);
+    const nextRaceWeatherEl = qs("#nextRaceWeather");
+    if (nextRaceWeatherEl) {
+      nextRaceWeatherEl.textContent = `Track weather: ${weatherSummary}`;
+    }
     updateLiveHUD({
       raceName: nextRace?.raceName || "No upcoming race",
       country: nextRace?.Circuit?.Location?.country || "",
@@ -1999,6 +2080,8 @@ async function renderF1() {
     qs("#driverStandings").innerHTML = renderStandingsList(drivers);
     setupDriverListEvents();
     setupStandingsExpandControl();
+    setupCurrentStandingToggle();
+    renderCurrentStandingView();
 
     const seasonYear = nextRace?.season ? Number(nextRace.season) : new Date().getUTCFullYear();
     const prediction = await buildRacePrediction(drivers, nextRace, seasonYear);
