@@ -25,6 +25,8 @@ html,
 body {
   margin: 0;
   min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
 }
 
 body {
@@ -79,6 +81,25 @@ body {
   justify-content: space-between;
   align-items: end;
   padding-top: 2.2rem;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.brand-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  background: linear-gradient(155deg, rgba(var(--accent-rgb), 0.22), rgba(255, 255, 255, 0.05));
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(var(--accent-rgb), 0.22) inset;
+}
+
+.brand-copy {
+  min-width: 0;
 }
 
 .header-nav-right {
@@ -201,6 +222,7 @@ body.is-loading .loading-skeleton {
 
 .dashboard-shell {
   padding: 2rem 0 3.2rem;
+  min-width: 0;
 }
 
 .live-hud {
@@ -430,6 +452,7 @@ body.is-loading .loading-skeleton {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1.5rem;
   min-width: 0;
+  width: 100%;
 }
 
 .dashboard-grid.f1-layout {
@@ -461,6 +484,7 @@ body.is-loading .loading-skeleton {
   gap: 1.2rem;
   margin-bottom: 1.2rem;
   min-width: 0;
+  align-items: start;
 }
 
 .event-list-toggle-wrap {
@@ -498,6 +522,10 @@ body.is-loading .loading-skeleton {
   width: min(1020px, 95vw);
   max-height: 84vh;
   overflow: auto;
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background:
+    radial-gradient(circle at 85% 8%, rgba(var(--accent-rgb), 0.14), transparent 35%),
+    linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
 }
 
 .modal-roadmap {
@@ -522,6 +550,53 @@ body.is-loading .loading-skeleton {
 
 .current-standing-card {
   overflow: hidden;
+}
+
+.support-driver-card {
+  overflow: hidden;
+}
+
+.supporting-info-grid {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.support-info-card {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.58rem;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.support-info-card p {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.55rem;
+  align-items: baseline;
+}
+
+.support-info-card p span {
+  color: var(--text-2);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.support-info-card p strong,
+.support-info-card p a {
+  color: var(--text-0);
+  font-size: 0.83rem;
+  text-align: right;
+}
+
+.support-info-card p a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
 }
 
 .standings-switch {
@@ -652,6 +727,10 @@ body.is-loading .loading-skeleton {
   background:
     radial-gradient(circle at 18% 14%, rgba(var(--accent-rgb), 0.22), transparent 48%),
     linear-gradient(165deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+}
+
+.next-race-card .card-title {
+  border-bottom-color: rgba(var(--accent-rgb), 0.3);
 }
 
 .weekend-hero {
@@ -935,13 +1014,120 @@ body.is-loading .loading-skeleton {
 .data-item.active {
   background: rgba(var(--accent-rgb), 0.12);
   border-color: rgba(var(--accent-rgb), 0.65);
-  transform: translateX(3px);
+  transform: translateY(-1px);
 }
 
 .data-item strong {
   display: block;
   color: var(--text-0);
   font-size: 0.96rem;
+}
+
+.constructor-item {
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.56rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.constructor-item:hover {
+  border-color: rgba(var(--accent-rgb), 0.64);
+  background: rgba(var(--accent-rgb), 0.1);
+  transform: translateY(-1px);
+}
+
+.constructor-standing-item {
+  width: 100%;
+  text-align: left;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.constructor-standing-item:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.constructor-standing-item.active,
+.constructor-standing-item.active:hover {
+  border-color: rgba(var(--team-accent-rgb, 225, 6, 0), 0.78);
+  background: linear-gradient(150deg, rgba(var(--team-accent-rgb, 225, 6, 0), 0.18), rgba(255, 255, 255, 0.04));
+  box-shadow: 0 0 0 1px rgba(var(--team-accent-rgb, 225, 6, 0), 0.28) inset, 0 10px 22px rgba(var(--team-accent-rgb, 225, 6, 0), 0.16);
+}
+
+.constructor-standing-main {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.62rem;
+  align-items: center;
+}
+
+.constructor-rank {
+  color: var(--text-2);
+  font-size: 0.84rem;
+  min-width: 28px;
+}
+
+.constructor-copy {
+  min-width: 0;
+}
+
+.constructor-copy strong,
+.constructor-copy span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.constructor-copy strong {
+  color: var(--text-0);
+  font-size: 0.96rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+}
+
+.constructor-copy span {
+  color: var(--text-1);
+  font-size: 0.84rem;
+}
+
+.constructor-logo-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.constructor-standing-item.active .constructor-logo-chip {
+  border-color: rgba(var(--team-accent-rgb, 225, 6, 0), 0.7);
+  box-shadow: 0 0 0 1px rgba(var(--team-accent-rgb, 225, 6, 0), 0.34) inset;
+}
+
+.constructor-team-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.constructor-logo-fallback {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--text-0);
 }
 
 .driver-item-main {
@@ -968,6 +1154,10 @@ body.is-loading .loading-skeleton {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.driver-copy strong {
+  line-height: 1.2;
 }
 
 .driver-copy span {
@@ -1212,6 +1402,25 @@ body.is-loading .loading-skeleton {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.prediction-row-btn {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.prediction-row-btn:hover {
+  border-color: rgba(var(--accent-rgb), 0.65);
+  background: rgba(var(--accent-rgb), 0.1);
+  transform: translateY(-1px);
+}
+
+.prediction-row-btn:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.78);
+  outline-offset: 2px;
+}
+
 .prediction-row strong {
   display: block;
   font-size: 0.92rem;
@@ -1371,12 +1580,30 @@ body.is-loading .loading-skeleton {
   padding: 1rem;
 }
 
+#eventListModal {
+  animation: modalBackdropIn 240ms ease-out both;
+}
+
+#eventListModal .event-list-modal-card {
+  animation: modalCardIn 330ms cubic-bezier(0.18, 0.78, 0.18, 1) both;
+}
+
 .map-modal.hidden {
   display: none;
 }
 
 .map-modal-card {
   width: min(980px, 94vw);
+}
+
+.insight-modal-card {
+  width: min(720px, 94vw);
+  max-height: 84vh;
+  overflow: auto;
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background:
+    radial-gradient(circle at 90% 6%, rgba(var(--accent-rgb), 0.12), transparent 34%),
+    rgba(255, 255, 255, 0.04);
 }
 
 .map-modal-head {
@@ -1485,6 +1712,15 @@ body.is-loading .loading-skeleton {
   padding-bottom: 0.4rem;
 }
 
+.season-calendar-strip.weekly-calendar {
+  grid-auto-flow: row;
+  grid-auto-columns: auto;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0.95rem;
+  overflow-x: visible;
+  padding-bottom: 0;
+}
+
 .season-roadmap-card {
   background:
     linear-gradient(170deg, rgba(var(--accent-rgb), 0.12), rgba(255, 255, 255, 0.03) 44%, rgba(255, 255, 255, 0.02));
@@ -1502,6 +1738,14 @@ body.is-loading .loading-skeleton {
   gap: 0.26rem;
   cursor: pointer;
   transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.season-calendar-strip.weekly-calendar .season-race-card {
+  border-radius: 16px;
+  padding: 0.8rem;
+  gap: 0.4rem;
+  background:
+    linear-gradient(165deg, rgba(16, 22, 34, 0.96), rgba(24, 31, 46, 0.92));
 }
 
 .season-race-card.completed {
@@ -1522,6 +1766,56 @@ body.is-loading .loading-skeleton {
   line-height: 1.22;
 }
 
+.weekly-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.32rem;
+  margin-top: 0.14rem;
+}
+
+.week-cell {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.3rem 0.18rem;
+  min-height: 58px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  align-content: space-between;
+  justify-items: center;
+}
+
+.week-cell em {
+  font-style: normal;
+  color: var(--text-2);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.week-cell strong {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1.06rem;
+  line-height: 1;
+}
+
+.week-cell.race-day {
+  border-color: rgba(var(--accent-rgb), 0.84);
+  background: linear-gradient(155deg, rgba(var(--accent-rgb), 0.28), rgba(var(--accent-rgb), 0.1));
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.34) inset;
+}
+
+.week-cell.race-day em,
+.week-cell.race-day strong {
+  color: #ffe7e7;
+}
+
 .season-race-card:hover {
   border-color: rgba(var(--accent-rgb), 0.65);
 }
@@ -1537,6 +1831,38 @@ body.is-loading .loading-skeleton {
 .season-weekend p {
   margin: 0.24rem 0;
   color: var(--text-1);
+}
+
+.season-session-list {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.season-session-list p {
+  margin: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.48rem 0.56rem;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.season-session-list p span {
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.season-session-list p strong {
+  color: var(--text-0);
+  font-size: 0.83rem;
+  text-align: right;
 }
 
 .sticky-data-grid {
@@ -1616,6 +1942,29 @@ body.is-loading .loading-skeleton {
   align-items: center;
   gap: 0.6rem;
   margin-bottom: 0.5rem;
+}
+
+.headtohead-card {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  background:
+    radial-gradient(circle at 87% 10%, rgba(var(--accent-rgb), 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.03);
+}
+
+#comparisonResult {
+  margin-top: 0.65rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 0.62rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+#comparisonResult .compare-grid {
+  margin-top: 0.52rem;
+}
+
+#comparisonResult p {
+  margin: 0.28rem 0;
 }
 
 .headtohead-auto {
@@ -1762,6 +2111,55 @@ body.is-loading .loading-skeleton {
   color: var(--text-1);
 }
 
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.insight-grid p {
+  margin: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.5rem 0.56rem;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 0.14rem;
+}
+
+.insight-grid p span {
+  font-size: 0.7rem;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.insight-grid p strong {
+  color: var(--text-0);
+  font-size: 0.92rem;
+}
+
+.insight-chart-wrap {
+  margin-top: 0.56rem;
+  height: 220px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.36rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#insightChartCanvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.insight-note {
+  margin: 0.58rem 0 0;
+  color: var(--text-1);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .knowledge-output a {
   color: var(--accent);
 }
@@ -1866,7 +2264,7 @@ body.is-loading .loading-skeleton {
 
 .news-item:hover {
   border-color: rgba(var(--accent-rgb), 0.6);
-  transform: translateX(2px);
+  transform: translateY(-1px);
   background: rgba(var(--accent-rgb), 0.08);
 }
 
@@ -1991,6 +2389,26 @@ body.theme-shift .glass-card {
   }
 }
 
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 body[data-module="f1"] .live-hud {
   border-top: 3px solid var(--accent);
 }
@@ -2013,9 +2431,26 @@ body[data-module="nba"] .live-hud {
     justify-items: start;
   }
 
-  .header-tools {
-    grid-template-columns: 1fr;
+  .brand-lockup {
     width: 100%;
+  }
+
+  .brand-logo {
+    width: 56px;
+    height: 56px;
+  }
+
+  .header-tools {
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .header-tools > .top-search {
+    grid-column: 1 / -1;
+  }
+
+  .header-tools .profile-chip {
+    justify-self: end;
   }
 
   .live-hud {
@@ -2043,7 +2478,14 @@ body[data-module="nba"] .live-hud {
   .card-title-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .card-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
   }
 
   .countdown-rack {
@@ -2103,9 +2545,14 @@ body[data-module="nba"] .live-hud {
     align-items: flex-start;
   }
 
+  .event-list-modal-card {
+    max-height: 90vh;
+  }
+
   .data-list {
     max-height: 280px;
-    overflow-y: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .data-list.expanded {
@@ -2121,6 +2568,23 @@ body[data-module="nba"] .live-hud {
   .sticky-data-grid,
   .season-standing-mini .sticky-data-grid {
     grid-template-columns: 1fr;
+  }
+
+  .season-calendar-strip.weekly-calendar {
+    grid-template-columns: 1fr;
+  }
+
+  .week-grid {
+    gap: 0.26rem;
+  }
+
+  .week-cell {
+    min-height: 52px;
+    padding: 0.26rem 0.12rem;
+  }
+
+  .week-cell strong {
+    font-size: 0.94rem;
   }
 
   .grid-row {
@@ -2140,6 +2604,13 @@ body[data-module="nba"] .live-hud {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  #eventListModal,
+  #eventListModal .event-list-modal-card {
+    animation: none;
+  }
+}
+
 @media (max-height: 540px) and (orientation: landscape) and (max-width: 960px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -2153,6 +2624,21 @@ body[data-module="nba"] .live-hud {
     padding-right: 1rem;
   }
 
+  .app-header {
+    padding-top: 1.15rem;
+  }
+
+  .brand-lockup {
+    gap: 0.7rem;
+    align-items: flex-start;
+  }
+
+  .brand-logo {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+  }
+
   .tab-btn,
   .ghost-btn,
   .small-btn {
@@ -2162,6 +2648,112 @@ body[data-module="nba"] .live-hud {
 
   .brand h1 {
     font-size: 1.8rem;
+  }
+
+  .brand-note {
+    font-size: 0.84rem;
+  }
+
+  .header-tools {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .header-tools > .top-search,
+  .header-tools .profile-chip {
+    grid-column: auto;
+  }
+
+  .header-tools .profile-chip {
+    justify-self: start;
+  }
+
+  .glass-card {
+    padding: 1rem;
+    border-radius: 14px;
+  }
+
+  .standings-switch {
+    gap: 0.38rem;
+  }
+
+  .standings-switch .small-btn {
+    flex: 1 1 calc(50% - 0.38rem);
+    min-width: 0;
+    text-align: center;
+    padding: 0.4rem 0.44rem;
+    font-size: 0.74rem;
+  }
+
+  .data-item {
+    padding: 0.58rem;
+  }
+
+  .driver-avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .driver-copy strong,
+  .driver-copy span {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .constructor-copy strong,
+  .constructor-copy span {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .constructor-logo-chip {
+    width: 32px;
+    height: 32px;
+  }
+
+  .driver-copy strong {
+    font-size: 0.92rem;
+  }
+
+  .driver-copy span {
+    font-size: 0.78rem;
+  }
+
+  .headtohead-card .small-btn {
+    width: 100%;
+  }
+
+  .headtohead-auto {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .compare-cell {
+    padding: 0.62rem;
+  }
+
+  .compare-cell p {
+    margin: 0.18rem 0;
+    font-size: 0.78rem;
+  }
+
+  .weekend-hero {
+    padding: 0.72rem;
+  }
+
+  .season-session-list p {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .season-session-list p strong {
+    text-align: left;
+  }
+
+  .event-list-modal-card {
+    width: 96vw;
   }
 
   .live-hud {
@@ -2175,6 +2767,28 @@ body[data-module="nba"] .live-hud {
   .prediction-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .supporting-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .support-info-card p {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .support-info-card p strong,
+  .support-info-card p a {
+    text-align: left;
+  }
+
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-chart-wrap {
+    height: 180px;
   }
 
   .prediction-prob-wrap,

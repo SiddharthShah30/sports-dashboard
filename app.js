@@ -38,7 +38,7 @@ const state = {
     nextRace: null,
     map: null,
     countdownTicker: null,
-    chart: null,
+    insightChart: null,
     seasonCalendar: [],
     seasonCompletedRound: 0,
     expandedRound: 0,
@@ -974,7 +974,7 @@ function renderRacePrediction(prediction) {
     .map((pick, idx) => {
       const pct = Math.max(4, Math.round(pick.probability));
       return `
-        <div class="prediction-row">
+        <button class="prediction-row prediction-row-btn" type="button" data-prediction-driver="${escapeHtml(pick.id)}" data-prediction-confidence="${pick.probability.toFixed(1)}" aria-label="Open prediction detail for ${escapeHtml(pick.driverName)}">
           <div>
             <strong>P${idx + 1} ${escapeHtml(pick.driverName)} (${escapeHtml(pick.code)})</strong>
             <p>${escapeHtml(pick.teamName)}</p>
@@ -983,7 +983,7 @@ function renderRacePrediction(prediction) {
             <span>${pick.probability.toFixed(1)}%</span>
             <div class="prediction-prob-bar"><div style="width:${pct}%;"></div></div>
           </div>
-        </div>
+        </button>
       `;
     })
     .join("");
@@ -1100,7 +1100,7 @@ function renderStandingsList(drivers) {
         : `${team} | ${points} pts`;
 
       return `
-        <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}">
+        <button class="data-item ${isActive ? "active" : ""}" data-driver-id="${id}" type="button" aria-label="Open driver insight for ${escapeHtml(driverName)}">
           <div class="driver-item-main">
             <img class="driver-avatar" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(driverName)}" loading="lazy" onerror="this.onerror=null;this.src='${escapeHtml(fallbackAvatar)}'" />
             <div class="driver-copy">
@@ -1116,26 +1116,50 @@ function renderStandingsList(drivers) {
 }
 
 function renderConstructorBars(constructors) {
-  const leaderPoints = toNum(constructors[0]?.points) || 1;
-
   return constructors
-    .slice(0, 6)
     .map((entry, index) => {
-      const pct = Math.max(8, (toNum(entry.points) / leaderPoints) * 100);
-      const color = safeTeamColor(index);
       const teamName = entry.Constructor.name;
       const logo = state.f1.teamLogoMap[teamName] || "";
+      const wins = toNum(entry.wins);
+      const points = toNum(entry.points);
+      const standingLine = `${points} pts | ${wins} win${wins === 1 ? "" : "s"}`;
+      const teamAccent = TEAM_ACCENTS[teamName] || "#8a93a8";
+      const normalized = teamAccent.replace("#", "");
+      const fullHex = normalized.length === 3
+        ? normalized.split("").map((ch) => `${ch}${ch}`).join("")
+        : normalized;
+      const r = Number.parseInt(fullHex.slice(0, 2), 16);
+      const g = Number.parseInt(fullHex.slice(2, 4), 16);
+      const b = Number.parseInt(fullHex.slice(4, 6), 16);
+      const accentRgb = Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)
+        ? `${r}, ${g}, ${b}`
+        : "138, 147, 168";
+      const isActive = state.favoriteTeam
+        ? state.favoriteTeam === teamName
+        : index === 0;
+      const fallbackCode = String(teamName || "TM")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || "")
+        .join("") || "TM";
 
       return `
-        <div class="card-entry" style="margin-bottom:0.65rem;">
-          <div class="label-row">
-            <span>${logo ? `<img class="team-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(teamName)}" loading="lazy" onerror="this.style.display='none'" />` : ""}${teamName}</span>
-            <span>${entry.points} pts</span>
+        <button class="data-item constructor-standing-item ${isActive ? "active" : ""}" style="--team-accent:${escapeHtml(teamAccent)};--team-accent-rgb:${escapeHtml(accentRgb)};" data-team-name="${escapeHtml(teamName)}" data-team-points="${escapeHtml(entry.points)}" data-team-wins="${escapeHtml(entry.wins)}" data-team-position="${escapeHtml(entry.position)}" type="button" aria-label="Open constructor insight for ${escapeHtml(teamName)}">
+          <div class="constructor-standing-main">
+            <span class="constructor-rank">#${escapeHtml(entry.position)}</span>
+            <div class="constructor-copy">
+              <strong>
+                <span class="constructor-logo-chip">
+                  ${logo ? `<img class="constructor-team-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(teamName)}" loading="lazy" onload="this.nextElementSibling.style.display='none'" onerror="this.style.display='none'" />` : ""}
+                  <span class="constructor-logo-fallback">${escapeHtml(fallbackCode)}</span>
+                </span>
+                ${escapeHtml(teamName)}
+              </strong>
+              <span>${escapeHtml(standingLine)}</span>
+            </div>
           </div>
-          <div class="progress-wrap">
-            <div class="progress-fill" style="width:${pct}%;background:${color};"></div>
-          </div>
-        </div>
+        </button>
       `;
     })
     .join("");
@@ -1580,32 +1604,108 @@ function renderSeasonCalendar(races) {
     state.f1.expandedRound = state.f1.seasonCompletedRound + 1;
   }
 
+  const dayShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const weekStartMonday = (dateObj) => {
+    const dt = new Date(dateObj);
+    const day = dt.getUTCDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    dt.setUTCDate(dt.getUTCDate() + diff);
+    return dt;
+  };
+
+  const addDays = (dateObj, days) => {
+    const dt = new Date(dateObj);
+    dt.setUTCDate(dt.getUTCDate() + days);
+    return dt;
+  };
+
+  host.classList.add("weekly-calendar");
   host.innerHTML = races
     .map((race) => {
       const round = toNum(race.round);
       const isCompleted = round <= state.f1.seasonCompletedRound;
       const isActive = round === state.f1.expandedRound;
+      const raceDate = new Date(`${race.date}T${race.time || "00:00:00Z"}`);
+      const monday = Number.isNaN(raceDate.getTime()) ? null : weekStartMonday(raceDate);
+      const weekDays = monday
+        ? Array.from({ length: 7 }, (_, idx) => addDays(monday, idx))
+        : [];
+      const weekLabel = monday
+        ? `${monday.toLocaleDateString("en-US", { month: "short", day: "2-digit", timeZone: "UTC" })} - ${addDays(monday, 6).toLocaleDateString("en-US", { month: "short", day: "2-digit", timeZone: "UTC" })}`
+        : "Week TBD";
       const formatted = formatEventTimeByMode(race.date, race.time, state.timezone, getTrackTimeZone(race));
       return `
         <button class="season-race-card ${isCompleted ? "completed" : "upcoming"} ${isActive ? "active" : ""}" data-race-round="${round}" type="button">
-          <span class="kicker">Round ${round}</span>
+          <div class="weekly-head">
+            <span class="kicker">Round ${round}</span>
+            <span class="inline-meta">${escapeHtml(weekLabel)}</span>
+          </div>
           <strong>${escapeHtml(race.raceName)}</strong>
           <span>${escapeHtml(race.Circuit?.Location?.locality || "Unknown")}</span>
-          <span>${escapeHtml(formatted.dateLabel)}</span>
+          <div class="week-grid" aria-hidden="true">
+            ${weekDays.map((day) => {
+              const isRaceDay = race.date === day.toISOString().slice(0, 10);
+              return `<span class="week-cell ${isRaceDay ? "race-day" : ""}"><em>${dayShort[(day.getUTCDay() + 6) % 7]}</em><strong>${day.toLocaleDateString("en-US", { day: "2-digit", timeZone: "UTC" })}</strong></span>`;
+            }).join("")}
+          </div>
+          <span class="inline-meta">Race start: ${escapeHtml(formatted.dateLabel)} ${escapeHtml(formatted.timeLabel)} ${escapeHtml(formatted.zoneLabel)}</span>
         </button>
       `;
     })
     .join("");
 
   const selected = races.find((race) => toNum(race.round) === state.f1.expandedRound) || races[0];
-  const selectedTime = formatEventTimeByMode(selected?.date, selected?.time, state.timezone, getTrackTimeZone(selected));
+  const trackTz = getTrackTimeZone(selected);
+  const formatSession = (label, date, time, key) => {
+    if (!date) {
+      return null;
+    }
+    const formatted = formatEventTimeByMode(date, time, state.timezone, trackTz);
+    const stamp = new Date(`${date}T${time || "00:00:00Z"}`).getTime();
+    return {
+      key,
+      label,
+      dateLabel: formatted.dateLabel,
+      timeLabel: formatted.timeLabel,
+      zoneLabel: formatted.zoneLabel,
+      stamp: Number.isFinite(stamp) ? stamp : Number.MAX_SAFE_INTEGER
+    };
+  };
+
+  const sessionRows = [
+    formatSession("FP1", selected?.FirstPractice?.date, selected?.FirstPractice?.time, "fp1"),
+    formatSession("FP2", selected?.SecondPractice?.date, selected?.SecondPractice?.time, "fp2"),
+    formatSession("FP3", selected?.ThirdPractice?.date, selected?.ThirdPractice?.time, "fp3"),
+    formatSession("Sprint Shootout", selected?.SprintQualifying?.date, selected?.SprintQualifying?.time, "sprint-shootout"),
+    formatSession("Sprint", selected?.Sprint?.date, selected?.Sprint?.time, "sprint"),
+    formatSession("Qualifying", selected?.Qualifying?.date, selected?.Qualifying?.time, "qualifying"),
+    formatSession("Race", selected?.date, selected?.time, "race")
+  ].filter(Boolean);
+
+  const seenTimestamps = new Set();
+  const timelineRows = sessionRows
+    .sort((a, b) => a.stamp - b.stamp)
+    .filter((row) => {
+      const key = `${row.dateLabel}|${row.timeLabel}|${row.zoneLabel}`;
+      if (row.key !== "race" && seenTimestamps.has(key)) {
+        return false;
+      }
+      seenTimestamps.add(key);
+      return true;
+    });
+
   detail.innerHTML = `
     <div class="season-weekend">
       <strong>${escapeHtml(selected?.raceName || "Selected Race")}</strong>
       <p>${escapeHtml(selected?.Circuit?.circuitName || "Circuit TBD")} • ${escapeHtml(selected?.Circuit?.Location?.country || "")}</p>
-      <p>FP1/FP2: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
-      <p>Qualifying: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
-      <p>Race: ${escapeHtml(selectedTime.dateLabel)} ${escapeHtml(selectedTime.timeLabel)} ${escapeHtml(selectedTime.zoneLabel)}</p>
+      <div class="season-session-list">
+        ${timelineRows.length
+          ? timelineRows
+            .map((row) => `<p><span>${escapeHtml(row.label)}</span><strong>${escapeHtml(row.dateLabel)} ${escapeHtml(row.timeLabel)} ${escapeHtml(row.zoneLabel)}</strong></p>`)
+            .join("")
+          : "<p class='empty-state'>Weekend session schedule is not available for this round yet.</p>"}
+      </div>
     </div>
   `;
 }
@@ -1999,15 +2099,312 @@ function setupCountdown(raceDateIso) {
 }
 
 function setupDriverListEvents() {
+  const refs = getInsightModalRefs();
+  if (!refs) {
+    return;
+  }
+
+  refs.closeBtn.onclick = () => {
+    refs.modal.classList.add("hidden");
+    if (state.f1.insightChart) {
+      state.f1.insightChart.destroy();
+      state.f1.insightChart = null;
+    }
+    triggerMicroFeedback();
+  };
+
+  refs.modal.onclick = (event) => {
+    if (event.target === refs.modal) {
+      refs.modal.classList.add("hidden");
+      if (state.f1.insightChart) {
+        state.f1.insightChart.destroy();
+        state.f1.insightChart = null;
+      }
+    }
+  };
+
   qsa("[data-driver-id]").forEach((button) => {
     button.addEventListener("click", async () => {
-      triggerMicroFeedback();
-      state.f1.selectedDriverId = button.dataset.driverId;
-      localStorage.setItem(STORAGE_KEYS.favoriteDriver, state.f1.selectedDriverId);
-      state.favoriteDriver = state.f1.selectedDriverId;
-      setHeaderMeta();
-      await renderF1();
+      const driverId = button.dataset.driverId;
+      const driver = state.f1.drivers.find((entry) => entry.Driver.driverId === driverId);
+      if (!driver) {
+        return;
+      }
+
+      const driverName = `${driver.Driver.givenName} ${driver.Driver.familyName}`;
+      const teamName = driver.Constructors?.[0]?.name || "Unknown Team";
+      const recentForm = (state.f1.recentFormMap[driverId] || []).slice(-3);
+      const recentFormText = recentForm.length ? recentForm.map((value, idx) => `R-${recentForm.length - idx}: ${toNum(value)} pts`).join(" | ") : "Recent form unavailable";
+      const age = driver.Driver.dateOfBirth
+        ? Math.max(0, new Date().getUTCFullYear() - new Date(driver.Driver.dateOfBirth).getUTCFullYear())
+        : null;
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Team</span><strong>${escapeHtml(teamName)}</strong></p>
+          <p><span>Championship Rank</span><strong>P${escapeHtml(driver.position)}</strong></p>
+          <p><span>Points</span><strong>${escapeHtml(driver.points)}</strong></p>
+          <p><span>Wins</span><strong>${escapeHtml(driver.wins)}</strong></p>
+          <p><span>Nationality</span><strong>${escapeHtml(driver.Driver.nationality || "Unknown")}</strong></p>
+          <p><span>Age</span><strong>${escapeHtml(age ? String(age) : "N/A")}</strong></p>
+          <p><span>Date of Birth</span><strong>${escapeHtml(driver.Driver.dateOfBirth || "N/A")}</strong></p>
+          <p><span>Value Index</span><strong>${escapeHtml(computeValueIndex(driver))}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Driver performance chart"></canvas>
+        </div>
+        <p class="insight-note">Recent form: ${escapeHtml(recentFormText)}</p>
+      `;
+
+      openInsightModal(`${driverName} • Driver Insight`, content);
+
+      try {
+        const trajectory = await fetchDriverTrajectory(driverId);
+        const labels = (trajectory?.labels || []).slice(-8);
+        const values = (trajectory?.values || []).slice(-8);
+
+        if (labels.length >= 2 && values.length >= 2) {
+          renderInsightChart({
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Cumulative Points",
+                  data: values,
+                  borderColor: "#e10600",
+                  backgroundColor: "rgba(225, 6, 0, 0.18)",
+                  tension: 0.24,
+                  fill: true,
+                  pointRadius: 2,
+                  borderWidth: 2
+                }
+              ]
+            },
+            options: {
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  labels: { color: "#1f2430" }
+                }
+              },
+              scales: {
+                x: {
+                  ticks: { color: "#2b3140" },
+                  grid: { color: "rgba(0,0,0,0.08)" }
+                },
+                y: {
+                  ticks: { color: "#2b3140" },
+                  grid: { color: "rgba(0,0,0,0.08)" }
+                }
+              }
+            }
+          });
+          return;
+        }
+      } catch (error) {
+        // Fallback chart below if trajectory fetch fails.
+      }
+
+      const fallbackForm = (state.f1.recentFormMap[driverId] || []).slice(-3);
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels: ["R-3", "R-2", "R-1"],
+          datasets: [
+            {
+              label: "Recent Points",
+              data: [
+                toNum(fallbackForm[0] ?? 0),
+                toNum(fallbackForm[1] ?? 0),
+                toNum(fallbackForm[2] ?? 0)
+              ],
+              backgroundColor: ["rgba(225, 6, 0, 0.88)", "rgba(255, 126, 63, 0.82)", "rgba(255, 205, 86, 0.82)"],
+              borderRadius: 8
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: "#1f2430" }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#2b3140" },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: "#2b3140" },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            }
+          }
+        }
+      });
     });
+  });
+
+  qsa("[data-team-name]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const teamName = button.dataset.teamName || "Unknown Team";
+      const points = button.dataset.teamPoints || "0";
+      const wins = button.dataset.teamWins || "0";
+      const position = button.dataset.teamPosition || "-";
+      const roster = state.f1.drivers
+        .filter((entry) => (entry.Constructors?.[0]?.name || "") === teamName)
+        .slice(0, 2)
+        .map((entry) => `${entry.Driver.givenName} ${entry.Driver.familyName} (P${entry.position})`)
+        .join(" • ") || "Roster details unavailable";
+      const budget = TEAM_BUDGET_MILLIONS[teamName] ? `$${TEAM_BUDGET_MILLIONS[teamName]}M` : "N/A";
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Constructor Rank</span><strong>P${escapeHtml(position)}</strong></p>
+          <p><span>Championship Points</span><strong>${escapeHtml(points)}</strong></p>
+          <p><span>Race Wins</span><strong>${escapeHtml(wins)}</strong></p>
+          <p><span>Estimated Budget</span><strong>${escapeHtml(budget)}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Constructor standings chart"></canvas>
+        </div>
+        <p class="insight-note">Top drivers: ${escapeHtml(roster)}</p>
+      `;
+
+      openInsightModal(`${teamName} • Team Insight`, content);
+
+      const topConstructors = (state.f1.constructors || []).slice(0, 8);
+      const labels = topConstructors.map((entry) => entry.Constructor.name);
+      const pointsData = topConstructors.map((entry) => toNum(entry.points));
+      const colors = labels.map((label) => label === teamName ? "rgba(225, 6, 0, 0.9)" : "rgba(77, 137, 255, 0.65)");
+
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Championship Points",
+              data: pointsData,
+              backgroundColor: colors,
+              borderRadius: 8,
+              maxBarThickness: 28
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: "#1f2430" }
+            }
+          },
+          scales: {
+            x: {
+              ticks: {
+                color: "#2b3140",
+                callback(value) {
+                  const label = this.getLabelForValue(value);
+                  return String(label).slice(0, 12);
+                }
+              },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { color: "#2b3140" },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            }
+          }
+        }
+      });
+    });
+  });
+}
+
+function setupPredictionInsightEvents(prediction, drivers) {
+  if (!prediction?.picks?.length) {
+    return;
+  }
+
+  qsa("[data-prediction-driver]").forEach((button) => {
+    button.onclick = () => {
+      const driverId = button.getAttribute("data-prediction-driver") || "";
+      const confidence = button.getAttribute("data-prediction-confidence") || "0";
+      const row = prediction.picks.find((pick) => pick.id === driverId);
+      const driver = (drivers || []).find((entry) => entry.Driver.driverId === driverId);
+      if (!row || !driver) {
+        return;
+      }
+
+      const detail = `
+        <div class="insight-grid">
+          <p><span>Driver</span><strong>${escapeHtml(row.driverName)} (${escapeHtml(row.code)})</strong></p>
+          <p><span>Team</span><strong>${escapeHtml(row.teamName)}</strong></p>
+          <p><span>Prediction Confidence</span><strong>${escapeHtml(confidence)}%</strong></p>
+          <p><span>Current Championship</span><strong>P${escapeHtml(driver.position)} • ${escapeHtml(driver.points)} pts</strong></p>
+          <p><span>Wins</span><strong>${escapeHtml(driver.wins)}</strong></p>
+          <p><span>Form Signal</span><strong>${(row.formNorm * 100).toFixed(1)}%</strong></p>
+          <p><span>Track History Signal</span><strong>${(row.trackNorm * 100).toFixed(1)}%</strong></p>
+          <p><span>Season Strength</span><strong>${(row.currentPointsNorm * 100).toFixed(1)}%</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Prediction model signal chart"></canvas>
+        </div>
+      `;
+
+      openInsightModal(`${row.driverName} • Prediction Breakdown`, detail);
+
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels: ["Season", "Wins", "Form", "History", "Track"],
+          datasets: [
+            {
+              label: "Signal Strength %",
+              data: [
+                Number((row.currentPointsNorm * 100).toFixed(1)),
+                Number((row.winsNorm * 100).toFixed(1)),
+                Number((row.formNorm * 100).toFixed(1)),
+                Number((row.historyNorm * 100).toFixed(1)),
+                Number((row.trackNorm * 100).toFixed(1))
+              ],
+              backgroundColor: [
+                "rgba(225, 6, 0, 0.88)",
+                "rgba(255, 88, 88, 0.84)",
+                "rgba(255, 126, 63, 0.82)",
+                "rgba(255, 179, 71, 0.82)",
+                "rgba(255, 205, 86, 0.82)"
+              ],
+              borderRadius: 8,
+              maxBarThickness: 30
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: "#1f2430" }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#2b3140" },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            },
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { color: "#2b3140" },
+              grid: { color: "rgba(0,0,0,0.08)" }
+            }
+          }
+        }
+      });
+    };
   });
 }
 
@@ -2190,57 +2587,41 @@ function setupResetButton() {
   });
 }
 
-function upsertTrajectoryChart(labels, values) {
-  const chartEl = qs("#trajectoryChart");
-  if (!chartEl) {
+function getInsightModalRefs() {
+  const modal = qs("#insightModal");
+  const closeBtn = qs("#closeInsightModal");
+  const titleEl = qs("#insightModalTitle");
+  const bodyEl = qs("#insightModalBody");
+  if (!modal || !closeBtn || !titleEl || !bodyEl) {
+    return null;
+  }
+  return { modal, closeBtn, titleEl, bodyEl };
+}
+
+function openInsightModal(title, content) {
+  const refs = getInsightModalRefs();
+  if (!refs) {
     return;
   }
-
-  if (state.f1.chart) {
-    state.f1.chart.destroy();
+  if (state.f1.insightChart) {
+    state.f1.insightChart.destroy();
+    state.f1.insightChart = null;
   }
+  refs.titleEl.textContent = title;
+  refs.bodyEl.innerHTML = content;
+  refs.modal.classList.remove("hidden");
+  triggerMicroFeedback();
+}
 
-  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#E10600";
-  const accentRgb = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").trim() || "225, 6, 0";
-
-  state.f1.chart = new Chart(chartEl, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Cumulative Points",
-          data: values,
-          borderColor: accent,
-          backgroundColor: `rgba(${accentRgb}, 0.18)`,
-          borderWidth: 2,
-          tension: 0.28,
-          fill: true,
-          pointRadius: 2
-        }
-      ]
-    },
-    options: {
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: {
-            color: "#101010"
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: "#303030" },
-          grid: { color: "rgba(0,0,0,0.12)" }
-        },
-        y: {
-          ticks: { color: "#303030" },
-          grid: { color: "rgba(0,0,0,0.12)" }
-        }
-      }
-    }
-  });
+function renderInsightChart(config) {
+  const canvas = qs("#insightChartCanvas");
+  if (!canvas || !config) {
+    return;
+  }
+  if (state.f1.insightChart) {
+    state.f1.insightChart.destroy();
+  }
+  state.f1.insightChart = new Chart(canvas, config);
 }
 
 function renderF1Skeleton() {
@@ -2249,7 +2630,7 @@ function renderF1Skeleton() {
   grid.innerHTML = `
     <section class="top-duo">
       <article class="glass-card card-entry next-race-card">
-        <h3 class="card-title">Next F1 Event Weekend <span class="card-title-actions"><span class="inline-meta" id="raceMeta">Syncing...</span><button id="toggleEventListBtn" class="small-btn" type="button">See Full F1 Even List</button></span></h3>
+        <h3 class="card-title">Next F1 Event Weekend <span class="card-title-actions"><span class="inline-meta" id="raceMeta">Syncing...</span><button id="toggleEventListBtn" class="small-btn" type="button">Open Weekly Calendar</button></span></h3>
         <div class="weekend-hero">
           <p class="kicker" id="nextRaceCircuit">Circuit loading...</p>
           <strong id="nextRaceName">Grand Prix loading...</strong>
@@ -2327,11 +2708,11 @@ function renderF1Skeleton() {
         </div>
       </article>
 
-      <article class="glass-card card-entry priority-card">
+      <article class="glass-card card-entry priority-card support-driver-card">
         <h3 class="card-title">Supporting Driver and Team</h3>
         <div id="profileStats" class="stats-row"></div>
-        <div style="height: 180px; margin-top: 1rem;">
-          <canvas id="trajectoryChart"></canvas>
+        <div id="supportingInfo" class="supporting-info-grid">
+          <p class="empty-state">Loading driver and team intelligence...</p>
         </div>
       </article>
     </section>
@@ -2352,7 +2733,7 @@ function renderF1Skeleton() {
         </div>
       </article>
 
-      <article class="glass-card card-entry">
+      <article class="glass-card card-entry headtohead-card">
         <h3 class="card-title">Head-to-Head</h3>
         <div class="split" style="margin-bottom:0.5rem;">
           <select id="driverA" class="select-input"></select>
@@ -2378,10 +2759,10 @@ function renderF1Skeleton() {
       </div>
     </div>
 
-    <div id="eventListModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Full Formula 1 event list">
+    <div id="eventListModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Formula 1 weekly race calendar">
       <div class="map-modal-card glass-card event-list-modal-card">
         <div class="map-modal-head">
-          <h3 class="card-title" style="margin:0;">Full F1 Event List</h3>
+          <h3 class="card-title" style="margin:0;">F1 Weekly Race Calendar</h3>
           <button id="closeEventListModal" class="small-btn">Close</button>
         </div>
         <div class="integrated-roadmap modal-roadmap">
@@ -2390,6 +2771,16 @@ function renderF1Skeleton() {
           </div>
           <div id="seasonCalendarDetail" class="season-calendar-detail"></div>
         </div>
+      </div>
+    </div>
+
+    <div id="insightModal" class="map-modal hidden" role="dialog" aria-modal="true" aria-label="Driver and team insight">
+      <div class="map-modal-card glass-card insight-modal-card">
+        <div class="map-modal-head">
+          <h3 class="card-title" id="insightModalTitle" style="margin:0;">Insight</h3>
+          <button id="closeInsightModal" class="small-btn" type="button">Close</button>
+        </div>
+        <div id="insightModalBody" class="knowledge-output"></div>
       </div>
     </div>
   `;
@@ -2534,6 +2925,7 @@ async function renderF1() {
     const seasonYear = nextRace?.season ? Number(nextRace.season) : new Date().getUTCFullYear();
     const prediction = await buildRacePrediction(drivers, nextRace, seasonYear);
     renderRacePrediction(prediction);
+    setupPredictionInsightEvents(prediction, drivers);
 
     const constructorBars = qs("#constructorBars");
     if (constructorBars) {
@@ -2563,6 +2955,10 @@ async function renderF1() {
     setHeaderMeta();
 
     const profileNode = qs("#profileStats");
+    const staleProfileHero = qs("#profileHero");
+    if (staleProfileHero) {
+      staleProfileHero.remove();
+    }
     profileNode.innerHTML = "";
     const selectedCode = (selectedDriver?.Driver?.code || selectedDriver?.Driver?.familyName?.slice(0, 3) || "").toUpperCase();
     const selectedMedia = state.f1.driverMediaMap[selectedCode] || {};
@@ -2608,7 +3004,49 @@ async function renderF1() {
       })
     );
 
-    upsertTrajectoryChart(trajectory.labels, trajectory.values);
+    const infoHost = qs("#supportingInfo");
+    const selectedDriverId = selectedDriver?.Driver?.driverId || "";
+    const teammate = drivers.find((entry) => {
+      const isSameTeam = (entry.Constructors?.[0]?.name || "") === selectedTeamName;
+      const isDifferentDriver = entry.Driver.driverId !== selectedDriverId;
+      return isSameTeam && isDifferentDriver;
+    });
+    const constructorEntry = constructors.find((entry) => entry.Constructor.name === selectedTeamName);
+    const constructorLeaderPoints = toNum(constructors?.[0]?.points) || 1;
+    const constructorPoints = toNum(constructorEntry?.points);
+    const teamGap = Math.max(0, constructorLeaderPoints - constructorPoints);
+    const teamPointsShare = constructorPoints > 0 ? ((constructorPoints / constructorLeaderPoints) * 100).toFixed(1) : "0.0";
+    const selectedDriverAge = selectedDriver?.Driver?.dateOfBirth
+      ? String(Math.max(0, new Date().getUTCFullYear() - new Date(selectedDriver.Driver.dateOfBirth).getUTCFullYear()))
+      : "N/A";
+    const recentForm = (state.f1.recentFormMap[selectedDriverId] || []).slice(-3);
+    const recentFormTotal = recentForm.reduce((sum, value) => sum + toNum(value), 0);
+    const recentFormLine = recentForm.length
+      ? `R-3 ${toNum(recentForm[0] ?? 0)} • R-2 ${toNum(recentForm[1] ?? 0)} • R-1 ${toNum(recentForm[2] ?? 0)}`
+      : "Recent rounds pending";
+
+    if (infoHost) {
+      infoHost.innerHTML = `
+        <article class="support-info-card">
+          <p class="kicker">Driver Intelligence</p>
+          <p><span>Code</span><strong>${escapeHtml(selectedCode || "N/A")}</strong></p>
+          <p><span>Nationality</span><strong>${escapeHtml(selectedDriver?.Driver?.nationality || "N/A")}</strong></p>
+          <p><span>Age</span><strong>${escapeHtml(selectedDriverAge)}</strong></p>
+          <p><span>Career URL</span><strong>${selectedDriver?.Driver?.url ? `<a href="${escapeHtml(selectedDriver.Driver.url)}" target="_blank" rel="noopener noreferrer">Profile</a>` : "N/A"}</strong></p>
+          <p><span>Last 3 Rounds</span><strong>${escapeHtml(recentFormLine)}</strong></p>
+          <p><span>Last 3 Total</span><strong>${escapeHtml(String(recentFormTotal))} pts</strong></p>
+        </article>
+        <article class="support-info-card">
+          <p class="kicker">Team Intelligence</p>
+          <p><span>Constructor Rank</span><strong>P${escapeHtml(constructorEntry?.position || "-")}</strong></p>
+          <p><span>Constructor Points</span><strong>${escapeHtml(String(constructorPoints || 0))} pts</strong></p>
+          <p><span>Points Gap to Leader</span><strong>${escapeHtml(String(teamGap))} pts</strong></p>
+          <p><span>Championship Share</span><strong>${escapeHtml(teamPointsShare)}%</strong></p>
+          <p><span>Race Wins</span><strong>${escapeHtml(constructorEntry?.wins || "0")}</strong></p>
+          <p><span>Teammate</span><strong>${escapeHtml(teammate ? `${teammate.Driver.givenName} ${teammate.Driver.familyName}` : "N/A")}</strong></p>
+        </article>
+      `;
+    }
   } catch (error) {
     console.error("renderF1 failed", error);
     const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown error";
