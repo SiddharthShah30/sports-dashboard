@@ -4,7 +4,9 @@ const STORAGE_KEYS = {
   favoriteTeam: "paddock:favoriteTeam",
   timezone: "paddock:timezone",
   fxEnabled: "paddock:fxEnabled",
-  f1CoreCache: "paddock:f1CoreCache"
+  f1CoreCache: "paddock:f1CoreCache",
+  preferredSports: "sports:preferredSports",
+  welcomeSeen: "sports:welcomeSeen"
 };
 
 const ERGAST_BASES = ["https://api.jolpi.ca/ergast/f1", "https://ergast.com/api/f1"];
@@ -53,6 +55,9 @@ const state = {
   football: {
     season: new Date().getUTCMonth() >= 6 ? new Date().getUTCFullYear() : new Date().getUTCFullYear() - 1,
     featuredLeagueId: 39,
+    countryFilter: "",
+    leagueSearch: "",
+    leaguesCatalog: [],
     standings: [],
     upcomingFixtures: [],
     topScorers: [],
@@ -571,6 +576,39 @@ async function fetchFootballStandingsWithFallback(leagueId, preferredSeason) {
     data: lastData,
     table: []
   };
+}
+
+async function fetchFootballLeaguesCatalog() {
+  const data = await fetchFootballJSON("/leagues", { current: "true" });
+  const map = new Map();
+
+  (data?.response || []).forEach((entry) => {
+    const leagueId = toNum(entry?.league?.id);
+    if (!leagueId) {
+      return;
+    }
+    const seasons = (entry?.seasons || [])
+      .map((season) => toNum(season?.year))
+      .filter((year) => Number.isFinite(year) && year >= FOOTBALL_FREE_PLAN_SEASON_MIN && year <= FOOTBALL_FREE_PLAN_SEASON_MAX)
+      .sort((a, b) => b - a);
+
+    map.set(leagueId, {
+      id: leagueId,
+      name: entry?.league?.name || "League",
+      country: entry?.country?.name || "Unknown",
+      logo: entry?.league?.logo || "",
+      type: entry?.league?.type || "League",
+      seasons
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => {
+    const byCountry = a.country.localeCompare(b.country);
+    if (byCountry !== 0) {
+      return byCountry;
+    }
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function bindInsightModalClose() {
@@ -2587,6 +2625,58 @@ function setupSettingsDrawer() {
   };
 }
 
+function setupWelcomeSportModal() {
+  const seen = localStorage.getItem(STORAGE_KEYS.welcomeSeen) === "yes";
+  if (seen) {
+    return;
+  }
+
+  const modal = document.createElement("div");
+  modal.className = "map-modal welcome-modal";
+  modal.id = "welcomeSportModal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.innerHTML = `
+    <div class="map-modal-card glass-card welcome-modal-card">
+      <div class="map-modal-head">
+        <h3 class="card-title" style="margin:0;">Choose Your Sports</h3>
+      </div>
+      <p class="inline-meta">Pick what you want first. You can always switch modules later.</p>
+      <div class="welcome-sport-grid">
+        <label><input type="checkbox" value="f1" checked /> Formula 1</label>
+        <label><input type="checkbox" value="football" checked /> Football</label>
+        <label><input type="checkbox" value="cricket" checked /> Cricket</label>
+        <label><input type="checkbox" value="nba" /> NBA</label>
+      </div>
+      <div class="upcoming-race-actions quick-actions">
+        <button id="welcomeContinueBtn" class="small-btn" type="button">Start Dashboard</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const continueBtn = qs("#welcomeContinueBtn");
+  if (!continueBtn) {
+    return;
+  }
+
+  continueBtn.onclick = () => {
+    const picks = qsa("#welcomeSportModal input[type='checkbox']:checked").map((node) => node.value);
+    const selected = picks.length ? picks : ["f1"];
+    localStorage.setItem(STORAGE_KEYS.preferredSports, JSON.stringify(selected));
+    localStorage.setItem(STORAGE_KEYS.welcomeSeen, "yes");
+
+    const priority = ["football", "cricket", "f1", "nba"];
+    const target = priority.find((module) => selected.includes(module)) || "f1";
+    state.activeModule = target;
+    localStorage.setItem(STORAGE_KEYS.module, target);
+
+    modal.remove();
+    triggerMicroFeedback();
+    renderModule();
+  };
+}
+
 function setupUpcomingRaceActions(nextRace) {
   const reminderBtn = qs("#setReminderBtn");
   const calendarBtn = qs("#addCalendarBtn");
@@ -3851,9 +3941,72 @@ async function renderFootball() {
   });
 
   try {
-    const featuredLeague = FOOTBALL_LEAGUES.find((league) => league.id === state.football.featuredLeagueId) || FOOTBALL_LEAGUES[0];
+    if (!state.football.leaguesCatalog.length) {
+      state.football.leaguesCatalog = await fetchFootballLeaguesCatalog();
+    }
+
+    const discoverable = state.football.leaguesCatalog.filter((league) => league.seasons.length);
+    const countries = Array.from(new Set(discoverable.map((league) => league.country))).sort((a, b) => a.localeCompare(b));
+
+    if (!state.football.countryFilter && countries.length) {
+      state.football.countryFilter = countries.includes("England") ? "England" : countries[0];
+    }
+
+    const searchTerm = String(state.football.leagueSearch || "").trim().toLowerCase();
+    const filteredLeagues = discoverable.filter((league) => {
+      if (state.football.countryFilter && league.country !== state.football.countryFilter) {
+        return false;
+      }
+      if (!searchTerm) {
+        return true;
+      }
+      const haystack = `${league.name} ${league.country}`.toLowerCase();
+      return haystack.includes(searchTerm);
+    });
+
+    if (!filteredLeagues.some((league) => league.id === state.football.featuredLeagueId)) {
+      state.football.featuredLeagueId = filteredLeagues[0]?.id || discoverable[0]?.id || 39;
+    }
+
+    const featuredLeague = discoverable.find((league) => league.id === state.football.featuredLeagueId)
+      || filteredLeagues[0]
+      || discoverable[0]
+      || FOOTBALL_LEAGUES[0];
+
+    const leagueMenu = filteredLeagues.slice(0, 60).map((league) => `
+      <button class="football-league-option ${league.id === featuredLeague.id ? "active" : ""}" type="button" data-football-league-option="${league.id}">
+        <img src="${escapeHtml(league.logo || "")}" alt="${escapeHtml(league.name)}" loading="lazy" onerror="this.style.display='none'" />
+        <span>
+          <strong>${escapeHtml(league.name)}</strong>
+          <small>${escapeHtml(league.country)} • ${escapeHtml(league.type)}</small>
+        </span>
+      </button>
+    `).join("");
+
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `
+      <article class="glass-card card-span-12 card-entry football-filter-card">
+        <div class="football-filter-grid">
+          <label>
+            Region
+            <select id="footballCountryFilter" class="select-input">
+              ${countries.map((country) => `<option value="${escapeHtml(country)}" ${country === state.football.countryFilter ? "selected" : ""}>${escapeHtml(country)}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Find League
+            <input id="footballLeagueSearch" class="select-input" value="${escapeHtml(state.football.leagueSearch || "")}" placeholder="Search by league or country" />
+          </label>
+          <p class="inline-meta">Universal mode: browse leagues globally and switch context instantly.</p>
+        </div>
+        <div class="football-league-strip">${leagueMenu || "<p class='empty-state'>No leagues found for this filter.</p>"}</div>
+      </article>
+      `
+    );
+
     const timezoneForApi = state.timezone === "TRACK_AUTO" ? "UTC" : (state.timezone || "Asia/Kolkata");
-    const standingsPack = await fetchFootballStandingsWithFallback(featuredLeague.id, state.football.season);
+    const standingsPack = await fetchFootballStandingsWithFallback(featuredLeague.id, featuredLeague.seasons?.[0] || state.football.season);
     const resolvedSeason = standingsPack.season;
     const standingsTable = standingsPack.table;
 
@@ -3902,7 +4055,7 @@ async function renderFootball() {
     state.football.season = resolvedSeason;
 
     const tickerItems = [
-      `${featuredLeague.name} season ${resolvedSeason}/${resolvedSeason + 1}`,
+      `${featuredLeague.name} (${featuredLeague.country}) season ${resolvedSeason}/${resolvedSeason + 1}`,
       leader ? `Leader ${leader.team.name} (${leader.points} pts)` : "Leader unavailable",
       topScorer ? `Golden Boot: ${topScorer.player.name} (${topScorer.statistics?.[0]?.goals?.total || 0})` : "Top scorer unavailable",
       nextFixture
@@ -3931,7 +4084,7 @@ async function renderFootball() {
       {
         title: "League Leader",
         value: leader?.team?.name || "Pending",
-        subtitle: leader ? `${leader.points} pts | GD ${leader.goalsDiff > 0 ? "+" : ""}${leader.goalsDiff}` : "Waiting for standings"
+        subtitle: leader ? `${leader.points} pts | GD ${leader.goalsDiff > 0 ? "+" : ""}${leader.goalsDiff}` : `Waiting for ${featuredLeague.name}`
       },
       {
         title: "Next Kickoff",
@@ -3941,7 +4094,7 @@ async function renderFootball() {
       {
         title: "Golden Boot Leader",
         value: topScorer?.player?.name || "No data",
-        subtitle: topScorer ? `${topScorer.statistics?.[0]?.goals?.total || 0} goals` : "Scorer feed unavailable"
+        subtitle: topScorer ? `${topScorer.statistics?.[0]?.goals?.total || 0} goals` : `Scorer feed unavailable for ${featuredLeague.name}`
       }
     ];
 
@@ -4072,6 +4225,29 @@ async function renderFootball() {
       </article>
       `
     );
+
+    const countrySelect = qs("#footballCountryFilter");
+    const leagueSearchInput = qs("#footballLeagueSearch");
+    qsa("[data-football-league-option]").forEach((button) => {
+      button.onclick = () => {
+        state.football.featuredLeagueId = toNum(button.getAttribute("data-football-league-option"));
+        triggerMicroFeedback();
+        renderFootball();
+      };
+    });
+    if (countrySelect) {
+      countrySelect.onchange = () => {
+        state.football.countryFilter = countrySelect.value || "";
+        triggerMicroFeedback();
+        renderFootball();
+      };
+    }
+    if (leagueSearchInput) {
+      leagueSearchInput.oninput = debounce(() => {
+        state.football.leagueSearch = leagueSearchInput.value || "";
+        renderFootball();
+      }, 220);
+    }
 
     renderFootballPointsChart(standingsTable, featuredLeague.name);
     setupFootballInsightEvents({
@@ -4436,6 +4612,7 @@ function bindGlobalEvents() {
 function init() {
   bindGlobalEvents();
   renderModule();
+  setupWelcomeSportModal();
 }
 
 window.addEventListener("DOMContentLoaded", init);
