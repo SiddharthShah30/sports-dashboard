@@ -1,6 +1,6 @@
 {
-  "name": "The Paddock Dashboard",
-  "short_name": "Paddock",
+  "name": "Sports Dashboard",
+  "short_name": "Sports",
   "description": "Broadcast-grade motorsport and sports intelligence dashboard.",
   "start_url": "./",
   "display": "standalone",

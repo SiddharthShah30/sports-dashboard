@@ -2032,6 +2032,10 @@ body.is-loading .loading-skeleton {
   gap: 0.84rem;
 }
 
+.football-stats-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .stat-card {
   min-height: 108px;
   display: flex;
@@ -2093,6 +2097,233 @@ body.is-loading .loading-skeleton {
   color: var(--text-1);
   font-size: 0.82rem;
   overflow-x: auto;
+}
+
+.football-card-glow {
+  border-color: rgba(33, 201, 107, 0.26);
+  background: linear-gradient(160deg, rgba(33, 201, 107, 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.football-standings-head,
+.football-standings-row {
+  display: grid;
+  grid-template-columns: 46px minmax(150px, 1fr) 64px 62px minmax(96px, 120px);
+  gap: 0.42rem;
+  align-items: center;
+}
+
+.football-standings-head {
+  padding: 0.35rem 0.48rem;
+  margin-bottom: 0.4rem;
+  color: var(--text-2);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.football-standings-list {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.football-standings-row {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 0.46rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.football-rank,
+.football-points,
+.football-gd {
+  text-align: center;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 1rem;
+  color: var(--text-0);
+}
+
+.football-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+  min-width: 0;
+}
+
+.football-team img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.football-team strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-0);
+}
+
+.football-form {
+  display: inline-flex;
+  gap: 0.2rem;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+.football-form-pill {
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.67rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.football-form-pill.win {
+  background: rgba(69, 210, 154, 0.24);
+  border-color: rgba(69, 210, 154, 0.65);
+}
+
+.football-form-pill.draw {
+  background: rgba(255, 201, 74, 0.21);
+  border-color: rgba(255, 201, 74, 0.6);
+}
+
+.football-form-pill.loss {
+  background: rgba(255, 91, 91, 0.2);
+  border-color: rgba(255, 91, 91, 0.55);
+}
+
+.football-pulse-grid {
+  display: grid;
+  gap: 0.46rem;
+}
+
+.football-pulse-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.56rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.football-pulse-item strong {
+  display: block;
+  margin: 0.1rem 0;
+  color: var(--text-0);
+}
+
+.football-pulse-item p {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 0.83rem;
+}
+
+.football-fixture-list,
+.football-scorer-list {
+  display: grid;
+  gap: 0.44rem;
+}
+
+.football-fixture-row {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 0.56rem;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  cursor: pointer;
+}
+
+.football-fixture-row:hover {
+  border-color: rgba(33, 201, 107, 0.6);
+  background: rgba(33, 201, 107, 0.12);
+}
+
+.football-fixture-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.football-team-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.football-team-inline.away {
+  justify-content: flex-end;
+}
+
+.football-team-inline img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.football-team-inline span {
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.football-vs {
+  font-family: "Barlow Condensed", sans-serif;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+}
+
+.football-fixture-row p {
+  margin: 0.2rem 0 0;
+  color: var(--text-1);
+}
+
+.football-scorer-row {
+  display: grid;
+  grid-template-columns: 26px 34px 1fr;
+  gap: 0.46rem;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.46rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.football-scorer-row img {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.football-scorer-row strong {
+  display: block;
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.football-scorer-row p {
+  margin: 0.08rem 0 0;
+  color: var(--text-1);
+  font-size: 0.8rem;
+}
+
+.football-chart-wrap {
+  height: 280px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .knowledge-output {
@@ -2504,6 +2735,15 @@ body[data-module="nba"] .live-hud {
     transform: scale(1.04);
   }
 
+  .football-standings-head,
+  .football-standings-row {
+    grid-template-columns: 40px minmax(120px, 1fr) 54px 52px minmax(90px, 110px);
+  }
+
+  .football-chart-wrap {
+    height: 240px;
+  }
+
   .practice-item {
     flex-direction: column;
     align-items: flex-start;
@@ -2534,6 +2774,10 @@ body[data-module="nba"] .live-hud {
   .compare-grid,
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .football-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .comparison-highlights {
@@ -2673,6 +2917,10 @@ body[data-module="nba"] .live-hud {
     border-radius: 14px;
   }
 
+  .football-stats-row {
+    grid-template-columns: 1fr;
+  }
+
   .standings-switch {
     gap: 0.38rem;
   }
@@ -2711,6 +2959,26 @@ body[data-module="nba"] .live-hud {
   .constructor-logo-chip {
     width: 32px;
     height: 32px;
+  }
+
+  .football-standings-head,
+  .football-standings-row {
+    grid-template-columns: 34px minmax(0, 1fr) 54px;
+  }
+
+  .football-col-gd,
+  .football-col-form,
+  .football-gd,
+  .football-form {
+    display: none;
+  }
+
+  .football-team-inline span {
+    font-size: 0.82rem;
+  }
+
+  .football-chart-wrap {
+    height: 210px;
   }
 
   .driver-copy strong {

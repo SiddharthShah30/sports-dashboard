@@ -1,4 +1,4 @@
-# The Paddock Dashboard
+# Sports Dashboard
 
 High-performance sports dashboard built with pure HTML, CSS, and JavaScript, now styled with a Bauhaus design system.
 

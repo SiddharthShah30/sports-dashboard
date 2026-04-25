@@ -49,6 +49,16 @@ const state = {
     standingView: "drivers",
     quizIndex: 0,
     quizScore: 0
+  },
+  football: {
+    season: new Date().getUTCMonth() >= 6 ? new Date().getUTCFullYear() : new Date().getUTCFullYear() - 1,
+    featuredLeagueId: 39,
+    standings: [],
+    upcomingFixtures: [],
+    topScorers: [],
+    liveFixtures: [],
+    pointsChart: null,
+    lastUpdated: ""
   }
 };
 
@@ -107,7 +117,7 @@ const SPORT_META = {
   },
   football: {
     tag: "FOOTBALL LIVE CENTER",
-    headline: "Structured league intelligence with modular match centers"
+    headline: "Live match pulse, standings momentum, and elite player form"
   },
   cricket: {
     tag: "CRICKET LIVE CENTER",
@@ -118,6 +128,24 @@ const SPORT_META = {
     headline: "Shot geography, efficiency ranking, and conference pressure"
   }
 };
+
+const MODULE_ACCENTS = {
+  f1: "#e10600",
+  football: "#21c96b",
+  cricket: "#27b4ff",
+  nba: "#ff8a3c"
+};
+
+const FOOTBALL_API = {
+  baseUrl: "https://v3.football.api-sports.io",
+  key: "8fb27fd382919bba6d637deb801b0096"
+};
+
+const FOOTBALL_LEAGUES = [
+  { id: 39, code: "PL", name: "Premier League", country: "England" },
+  { id: 140, code: "LL", name: "La Liga", country: "Spain" },
+  { id: 135, code: "SA", name: "Serie A", country: "Italy" }
+];
 
 const TRACK_PATHS = {
   bahrain: "M30 80 L90 30 L180 35 L240 55 L255 90 L230 120 L160 125 L120 110 L100 85 L70 95 L45 110",
@@ -428,6 +456,154 @@ async function fetchJSON(url) {
   }
 }
 
+async function fetchFootballJSON(path, params = {}) {
+  const search = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, String(value));
+    }
+  });
+
+  const url = `${FOOTBALL_API.baseUrl}${path}${search.toString() ? `?${search}` : ""}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "x-apisports-key": FOOTBALL_API.key
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Football API HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (String(data?.errors || "") && Object.keys(data.errors || {}).length) {
+      throw new Error("Football API returned an error payload");
+    }
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function footballKickoffLabel(isoDate) {
+  if (!isoDate) {
+    return "Kickoff TBD";
+  }
+  const dt = new Date(isoDate);
+  if (Number.isNaN(dt.getTime())) {
+    return "Kickoff TBD";
+  }
+  const zone = state.timezone === "TRACK_AUTO" ? "UTC" : (state.timezone || "Asia/Kolkata");
+  const dateLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    timeZone: zone
+  }).format(dt);
+  const timeLabel = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: zone
+  }).format(dt);
+  return `${dateLabel} ${timeLabel} ${timezoneLabel(zone)}`;
+}
+
+function destroyFootballChart() {
+  if (state.football.pointsChart) {
+    state.football.pointsChart.destroy();
+    state.football.pointsChart = null;
+  }
+}
+
+function renderFootballPointsChart(tableRows, leagueName) {
+  const canvas = qs("#footballPointsChart");
+  if (!canvas || typeof Chart === "undefined") {
+    return;
+  }
+
+  destroyFootballChart();
+
+  const top = (tableRows || []).slice(0, 6);
+  const labels = top.map((row) => row?.team?.name || "Team");
+  const points = top.map((row) => toNum(row?.points));
+  const goalDiff = top.map((row) => toNum(row?.goalsDiff));
+
+  state.football.pointsChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Points",
+          data: points,
+          borderWidth: 1,
+          borderColor: "rgba(33, 201, 107, 0.92)",
+          backgroundColor: "rgba(33, 201, 107, 0.34)",
+          borderRadius: 8,
+          maxBarThickness: 28
+        },
+        {
+          label: "Goal Diff",
+          data: goalDiff,
+          borderWidth: 1,
+          borderColor: "rgba(84, 173, 255, 0.95)",
+          backgroundColor: "rgba(84, 173, 255, 0.28)",
+          borderRadius: 8,
+          maxBarThickness: 28
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: "#d5ddef"
+          }
+        },
+        title: {
+          display: true,
+          text: `${leagueName} Top 6 Momentum`,
+          color: "#f6f8ff",
+          font: {
+            family: "Barlow",
+            size: 14,
+            weight: "600"
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "#c7d0e2"
+          },
+          grid: {
+            color: "rgba(255,255,255,0.08)"
+          }
+        },
+        y: {
+          ticks: {
+            color: "#c7d0e2"
+          },
+          grid: {
+            color: "rgba(255,255,255,0.08)"
+          }
+        }
+      }
+    }
+  });
+}
+
 async function fetchErgast(path) {
   let lastError = null;
   for (const base of ERGAST_BASES) {
@@ -600,7 +776,11 @@ function setHeaderMeta() {
   if (favoriteLabel) {
     favoriteLabel.textContent = favoriteBits.length ? favoriteBits.join(" | ") : "No favorites selected";
   }
-  applyTeamAccentTheme(state.favoriteTeam);
+  if (state.activeModule === "f1") {
+    applyTeamAccentTheme(state.favoriteTeam);
+  } else {
+    applyTeamAccentTheme("");
+  }
   document.body.setAttribute("data-module", state.activeModule);
 }
 
@@ -655,7 +835,7 @@ function getRacePhase(nextRace) {
 }
 
 function applyTeamAccentTheme(teamName) {
-  const accent = TEAM_ACCENTS[teamName] || "#E10600";
+  const accent = TEAM_ACCENTS[teamName] || MODULE_ACCENTS[state.activeModule] || MODULE_ACCENTS.f1;
   const currentAccent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().toLowerCase();
   const normalized = accent.replace("#", "");
   const full = normalized.length === 3
@@ -1753,7 +1933,7 @@ function renderFooterGrid(drivers, constructors, selectedDriver, nextRace) {
         .join("")}
     </section>
     <section class="footer-grid-col" data-standing-section="paddock">
-      <div class="footer-grid-head"><h4>My Paddock</h4></div>
+      <div class="footer-grid-head"><h4>My Sports</h4></div>
       <div class="footer-row"><span>Favorite Team</span><strong>${escapeHtml(state.favoriteTeam || "Not set")}</strong></div>
       <div class="footer-row"><span>Favorite Driver</span><strong>${escapeHtml(selectedDriver ? `${selectedDriver.Driver.givenName} ${selectedDriver.Driver.familyName}` : "Not set")}</strong></div>
       <div class="footer-row"><span>Timezone</span><strong>${escapeHtml(timezoneLabel(state.timezone === "TRACK_AUTO" ? trackTz : state.timezone))}</strong></div>
@@ -1841,7 +2021,7 @@ function setupUpcomingRaceActions(nextRace) {
     if (typeof Notification !== "undefined") {
       const perm = await Notification.requestPermission();
       if (perm === "granted") {
-        new Notification("Paddock Reminder", {
+        new Notification("Sports Dashboard Reminder", {
           body: `${nextRace.raceName} starts soon (${timezoneLabel(state.timezone)}).`
         });
         return;
@@ -1855,14 +2035,14 @@ function setupUpcomingRaceActions(nextRace) {
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Paddock Dashboard//EN",
+      "PRODID:-//Sports Dashboard//EN",
       "BEGIN:VEVENT",
-      `UID:${Date.now()}@paddock-dashboard`,
+      `UID:${Date.now()}@sports-dashboard`,
       `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
       `DTSTART:${new Date(startIso).toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
       `DTEND:${endIso.replace(/[-:]/g, "").split(".")[0]}Z`,
       `SUMMARY:${nextRace.raceName}`,
-      `DESCRIPTION:Formula 1 race reminder from The Paddock Dashboard`,
+      `DESCRIPTION:Formula 1 race reminder from Sports Dashboard`,
       "END:VEVENT",
       "END:VCALENDAR"
     ].join("\r\n");
@@ -3073,52 +3253,258 @@ async function renderF1() {
   }
 }
 
-function renderFootball() {
+async function renderFootball() {
   const grid = qs("#dashboardGrid");
   grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  destroyFootballChart();
+  setLoadingState(true);
   updateLiveHUD({
-    raceName: "Formula 1 module inactive",
-    localTime: "--",
-    countdown: "Switch to F1",
-    weather: "--",
+    raceName: "Loading football intelligence",
+    localTime: "Syncing",
+    countdown: "Fetching fixtures",
+    weather: "Syncing",
     seasonCompleted: 0,
     seasonTotal: 0
   });
 
-  const cards = [
-    { title: "League Focus", value: "EPL + La Liga", subtitle: "Swap feeds via adapter" },
-    { title: "Golden Boot Delta", value: "3 Goals", subtitle: "Top-3 race gap" },
-    { title: "Live Match Centers", value: "7 Active", subtitle: "Fixture monitor" }
-  ];
+  try {
+    const featuredLeague = FOOTBALL_LEAGUES.find((league) => league.id === state.football.featuredLeagueId) || FOOTBALL_LEAGUES[0];
+    const timezoneForApi = state.timezone === "TRACK_AUTO" ? "UTC" : (state.timezone || "Asia/Kolkata");
 
-  const statWrap = document.createElement("section");
-  statWrap.className = "card-span-12 stats-row";
-  cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
-  grid.appendChild(statWrap);
+    const [standingsData, fixturesData, scorersData, liveData, leaguePulseData] = await Promise.all([
+      fetchFootballJSON("/standings", {
+        league: featuredLeague.id,
+        season: state.football.season
+      }),
+      fetchFootballJSON("/fixtures", {
+        league: featuredLeague.id,
+        season: state.football.season,
+        next: 8,
+        timezone: timezoneForApi
+      }),
+      fetchFootballJSON("/players/topscorers", {
+        league: featuredLeague.id,
+        season: state.football.season
+      }),
+      fetchFootballJSON("/fixtures", {
+        live: "all",
+        timezone: timezoneForApi
+      }),
+      Promise.allSettled(
+        FOOTBALL_LEAGUES.map((league) => fetchFootballJSON("/standings", {
+          league: league.id,
+          season: state.football.season
+        }))
+      )
+    ]);
 
-  grid.insertAdjacentHTML(
-    "beforeend",
-    `
-    <article class="glass-card card-span-7 card-entry">
-      <h3 class="card-title">League Table Snapshot</h3>
-      <div class="data-list">
-        <div class="data-item"><strong>1. Arsenal</strong><span>72 pts | +38 GD</span></div>
-        <div class="data-item"><strong>2. Real Madrid</strong><span>70 pts | +31 GD</span></div>
-        <div class="data-item"><strong>3. Inter</strong><span>68 pts | +25 GD</span></div>
-        <div class="data-item"><strong>4. PSG</strong><span>66 pts | +29 GD</span></div>
-      </div>
-    </article>
+    const standingsTable = standingsData?.response?.[0]?.league?.standings?.[0] || [];
+    const upcomingFixtures = fixturesData?.response || [];
+    const topScorers = (scorersData?.response || []).slice(0, 6);
+    const liveFixtures = liveData?.response || [];
+    const leader = standingsTable[0] || null;
+    const nextFixture = upcomingFixtures[0] || null;
+    const topScorer = topScorers[0] || null;
+    const roundsPlayed = Math.max(...standingsTable.map((row) => toNum(row?.all?.played)), 0);
+    const seasonTotal = Math.max(roundsPlayed, 38);
+    const nowLabel = footballKickoffLabel(new Date().toISOString());
 
-    <article class="glass-card card-span-5 card-entry">
-      <h3 class="card-title">Adapter Endpoint</h3>
-      <p class="empty-state">Plug in API-Football or Football-Data.org key and map to the reusable card schema.</p>
-      <pre class="code-callout">fetch("https://api.football-data.org/v4/competitions/PL/standings", {
-  headers: { "X-Auth-Token": "YOUR_KEY" }
-});</pre>
-    </article>
-    `
-  );
+    state.football.standings = standingsTable;
+    state.football.upcomingFixtures = upcomingFixtures;
+    state.football.topScorers = topScorers;
+    state.football.liveFixtures = liveFixtures;
+    state.football.lastUpdated = new Date().toISOString();
+
+    const tickerItems = [
+      `${featuredLeague.name} season ${state.football.season}/${state.football.season + 1}`,
+      leader ? `Leader ${leader.team.name} (${leader.points} pts)` : "Leader unavailable",
+      topScorer ? `Golden Boot: ${topScorer.player.name} (${topScorer.statistics?.[0]?.goals?.total || 0})` : "Top scorer unavailable",
+      nextFixture
+        ? `${nextFixture.teams.home.name} vs ${nextFixture.teams.away.name} • ${footballKickoffLabel(nextFixture.fixture.date)}`
+        : "Next fixture unavailable",
+      `${liveFixtures.length} live fixtures across monitored leagues`
+    ];
+
+    updateLiveHUD({
+      raceName: `${featuredLeague.name} Command Center`,
+      country: featuredLeague.country,
+      localTime: nowLabel,
+      countdown: nextFixture?.fixture?.date ? formatCountdown(nextFixture.fixture.date) : "Kickoff TBD",
+      weather: `${liveFixtures.length} live fixtures`,
+      seasonCompleted: roundsPlayed,
+      seasonTotal,
+      tickerItems
+    });
+
+    const cards = [
+      {
+        title: "Live Match Centers",
+        value: String(liveFixtures.length),
+        subtitle: "Matches currently in play"
+      },
+      {
+        title: "League Leader",
+        value: leader?.team?.name || "Pending",
+        subtitle: leader ? `${leader.points} pts | GD ${leader.goalsDiff > 0 ? "+" : ""}${leader.goalsDiff}` : "Waiting for standings"
+      },
+      {
+        title: "Next Kickoff",
+        value: nextFixture ? `${nextFixture.teams.home.name} vs ${nextFixture.teams.away.name}` : "Fixture pending",
+        subtitle: nextFixture ? footballKickoffLabel(nextFixture.fixture.date) : "No upcoming fixture"
+      },
+      {
+        title: "Golden Boot Leader",
+        value: topScorer?.player?.name || "No data",
+        subtitle: topScorer ? `${topScorer.statistics?.[0]?.goals?.total || 0} goals` : "Scorer feed unavailable"
+      }
+    ];
+
+    const statWrap = document.createElement("section");
+    statWrap.className = "card-span-12 stats-row football-stats-row";
+    cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
+    grid.appendChild(statWrap);
+
+    const standingsRows = standingsTable.slice(0, 8).map((row) => {
+      const form = String(row.form || "").slice(-5).split("").filter(Boolean);
+      const formBadges = form.map((result) => {
+        const tone = result === "W" ? "win" : result === "D" ? "draw" : "loss";
+        return `<span class="football-form-pill ${tone}">${escapeHtml(result)}</span>`;
+      }).join("");
+
+      return `
+        <div class="football-standings-row">
+          <span class="football-rank">${escapeHtml(String(row.rank || "-"))}</span>
+          <span class="football-team">
+            <img src="${escapeHtml(row.team?.logo || "")}" alt="${escapeHtml(row.team?.name || "Team")}" loading="lazy" onerror="this.style.display='none'" />
+            <strong>${escapeHtml(row.team?.name || "Team")}</strong>
+          </span>
+          <span class="football-points">${escapeHtml(String(row.points || 0))}</span>
+          <span class="football-gd">${toNum(row.goalsDiff) > 0 ? "+" : ""}${escapeHtml(String(row.goalsDiff || 0))}</span>
+          <span class="football-form">${formBadges || "--"}</span>
+        </div>
+      `;
+    }).join("");
+
+    const fixtureRows = upcomingFixtures.slice(0, 6).map((match) => {
+      const statusLong = match?.fixture?.status?.long || "Scheduled";
+      const venue = match?.fixture?.venue?.name || "Venue TBA";
+      return `
+        <button class="football-fixture-row" type="button" aria-label="${escapeHtml(match.teams.home.name)} versus ${escapeHtml(match.teams.away.name)}">
+          <div class="football-fixture-main">
+            <div class="football-team-inline">
+              <img src="${escapeHtml(match.teams.home.logo || "")}" alt="${escapeHtml(match.teams.home.name)}" loading="lazy" onerror="this.style.display='none'" />
+              <span>${escapeHtml(match.teams.home.name)}</span>
+            </div>
+            <span class="football-vs">vs</span>
+            <div class="football-team-inline away">
+              <span>${escapeHtml(match.teams.away.name)}</span>
+              <img src="${escapeHtml(match.teams.away.logo || "")}" alt="${escapeHtml(match.teams.away.name)}" loading="lazy" onerror="this.style.display='none'" />
+            </div>
+          </div>
+          <p>${escapeHtml(footballKickoffLabel(match.fixture.date))}</p>
+          <p class="inline-meta">${escapeHtml(statusLong)} | ${escapeHtml(venue)}</p>
+        </button>
+      `;
+    }).join("");
+
+    const scorerRows = topScorers.map((entry, idx) => {
+      const goals = entry?.statistics?.[0]?.goals?.total || 0;
+      const assists = entry?.statistics?.[0]?.goals?.assists || 0;
+      const team = entry?.statistics?.[0]?.team?.name || "Club";
+      const playerPhoto = entry?.player?.photo || "";
+      return `
+        <div class="football-scorer-row">
+          <span class="football-rank">${idx + 1}</span>
+          <img src="${escapeHtml(playerPhoto)}" alt="${escapeHtml(entry?.player?.name || "Player")}" loading="lazy" onerror="this.style.display='none'" />
+          <div>
+            <strong>${escapeHtml(entry?.player?.name || "Player")}</strong>
+            <p>${escapeHtml(team)} | ${goals}G / ${assists}A</p>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    const pulseRows = leaguePulseData
+      .map((result, index) => {
+        if (result.status !== "fulfilled") {
+          return "";
+        }
+        const league = FOOTBALL_LEAGUES[index];
+        const snapshot = result.value?.response?.[0]?.league?.standings?.[0]?.[0];
+        if (!league || !snapshot) {
+          return "";
+        }
+        return `
+          <article class="football-pulse-item">
+            <p class="kicker">${escapeHtml(league.code)}</p>
+            <strong>${escapeHtml(snapshot.team?.name || "Leader")}</strong>
+            <p>${escapeHtml(String(snapshot.points || 0))} pts | GD ${toNum(snapshot.goalsDiff) > 0 ? "+" : ""}${escapeHtml(String(snapshot.goalsDiff || 0))}</p>
+          </article>
+        `;
+      })
+      .filter(Boolean)
+      .join("");
+
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `
+      <article class="glass-card card-span-8 card-entry football-card-glow">
+        <h3 class="card-title">${escapeHtml(featuredLeague.name)} Top 8 Table</h3>
+        <div class="football-standings-head">
+          <span class="football-col-rank">#</span><span class="football-col-team">Team</span><span class="football-col-points">Pts</span><span class="football-col-gd">GD</span><span class="football-col-form">Form</span>
+        </div>
+        <div class="football-standings-list">${standingsRows || "<p class='empty-state'>Standings unavailable right now.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-4 card-entry football-card-glow">
+        <h3 class="card-title">League Pulse</h3>
+        <div class="football-pulse-grid">${pulseRows || "<p class='empty-state'>League pulse unavailable.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-6 card-entry football-card-glow">
+        <h3 class="card-title">Upcoming Fixtures</h3>
+        <div class="football-fixture-list">${fixtureRows || "<p class='empty-state'>No scheduled fixtures found.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-6 card-entry football-card-glow">
+        <h3 class="card-title">Top Scorers</h3>
+        <div class="football-scorer-list">${scorerRows || "<p class='empty-state'>Scorer feed unavailable.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-12 card-entry football-card-glow">
+        <h3 class="card-title">Points and Goal Difference Trend</h3>
+        <div class="football-chart-wrap">
+          <canvas id="footballPointsChart" aria-label="Football points chart"></canvas>
+        </div>
+        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.football.lastUpdated))}. Data source: API-Football.</p>
+      </article>
+      `
+    );
+
+    renderFootballPointsChart(standingsTable, featuredLeague.name);
+  } catch (error) {
+    console.error("renderFootball failed", error);
+    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown football data error";
+    updateLiveHUD({
+      raceName: "Football feed issue",
+      localTime: "Unavailable",
+      countdown: "Unavailable",
+      weather: "Unavailable",
+      seasonCompleted: 0,
+      seasonTotal: 0,
+      tickerItems: ["Football services offline", "Check API key, rate limits, or CORS"]
+    });
+    grid.innerHTML = `
+      <article class="glass-card card-span-12 card-entry">
+        <h3 class="card-title">Football Data Stream Interrupted</h3>
+        <p class="empty-state">Unable to load the football APIs right now. Verify API-Football key validity and browser network access, then refresh.</p>
+        <p class="inline-meta">Debug: ${reason}</p>
+      </article>
+    `;
+  } finally {
+    setLoadingState(false);
+  }
 }
 
 function renderCricket() {
@@ -3230,6 +3616,9 @@ function renderModule() {
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
+  }
+  if (state.activeModule !== "football") {
+    destroyFootballChart();
   }
 
   switch (state.activeModule) {
