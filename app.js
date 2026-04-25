@@ -65,6 +65,8 @@ const state = {
     liveEvents: [],
     upcomingEvents: [],
     recentEvents: [],
+    competitionFilter: "all",
+    genderFilter: "all",
     momentumChart: null,
     lastUpdated: ""
   }
@@ -148,6 +150,9 @@ const FOOTBALL_API = {
   baseUrl: "https://v3.football.api-sports.io",
   key: "8fb27fd382919bba6d637deb801b0096"
 };
+
+const FOOTBALL_FREE_PLAN_SEASON_MIN = 2022;
+const FOOTBALL_FREE_PLAN_SEASON_MAX = 2024;
 
 const FOOTBALL_LEAGUES = [
   { id: 39, code: "PL", name: "Premier League", country: "England" },
@@ -535,21 +540,34 @@ function destroyFootballChart() {
 }
 
 async function fetchFootballStandingsWithFallback(leagueId, preferredSeason) {
-  const candidates = [preferredSeason, preferredSeason - 1, preferredSeason - 2]
-    .filter((value, idx, arr) => Number.isFinite(value) && arr.indexOf(value) === idx);
+  const preferred = Number.isFinite(preferredSeason) ? preferredSeason : FOOTBALL_FREE_PLAN_SEASON_MAX;
+  const capped = Math.min(FOOTBALL_FREE_PLAN_SEASON_MAX, Math.max(FOOTBALL_FREE_PLAN_SEASON_MIN, preferred));
+  const candidates = [];
+  for (let season = capped; season >= FOOTBALL_FREE_PLAN_SEASON_MIN; season -= 1) {
+    candidates.push(season);
+  }
 
   let lastData = null;
+  let lastError = null;
   for (const season of candidates) {
-    const data = await fetchFootballJSON("/standings", { league: leagueId, season });
-    const table = data?.response?.[0]?.league?.standings?.[0] || [];
-    if (table.length) {
-      return { season, data, table };
+    try {
+      const data = await fetchFootballJSON("/standings", { league: leagueId, season });
+      const table = data?.response?.[0]?.league?.standings?.[0] || [];
+      if (table.length) {
+        return { season, data, table };
+      }
+      lastData = data;
+    } catch (error) {
+      lastError = error;
     }
-    lastData = data;
+  }
+
+  if (lastError && !lastData) {
+    throw lastError;
   }
 
   return {
-    season: preferredSeason,
+    season: capped,
     data: lastData,
     table: []
   };
@@ -817,6 +835,52 @@ function cricketDateOffset(days = 0) {
 function isCricketLiveStatus(statusText = "") {
   const text = String(statusText || "").toLowerCase();
   return ["live", "in progress", "stumps", "lunch", "tea", "innings break", "delay", "no result"].some((term) => text.includes(term));
+}
+
+function isWomenCricketEvent(event) {
+  const gender = String(event?.strGender || "").toLowerCase();
+  const title = `${event?.strLeague || ""} ${event?.strEvent || ""}`.toLowerCase();
+  return gender.includes("female") || gender.includes("women") || /women|womens|women\'s|ladies|female/.test(title);
+}
+
+function isInternationalCricketEvent(event) {
+  const text = `${event?.strLeague || ""} ${event?.strEvent || ""}`.toLowerCase();
+  const internationalSignals = [
+    "international",
+    "world cup",
+    "champions trophy",
+    "odi",
+    "test",
+    "t20i",
+    "nations",
+    "series",
+    "asia cup",
+    "icc"
+  ];
+  return internationalSignals.some((signal) => text.includes(signal));
+}
+
+function applyCricketFilters(events, competitionFilter = "all", genderFilter = "all") {
+  return (events || []).filter((event) => {
+    const isWomen = isWomenCricketEvent(event);
+    const isInternational = isInternationalCricketEvent(event);
+
+    if (genderFilter === "women" && !isWomen) {
+      return false;
+    }
+    if (genderFilter === "men" && isWomen) {
+      return false;
+    }
+
+    if (competitionFilter === "international" && !isInternational) {
+      return false;
+    }
+    if (competitionFilter === "league" && isInternational) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function parseCricketRuns(value) {
@@ -4068,13 +4132,14 @@ async function renderCricket() {
     const now = Date.now();
 
     const sorted = deduped.sort((a, b) => new Date(a?.dateEvent || 0).getTime() - new Date(b?.dateEvent || 0).getTime());
-    const liveEvents = sorted.filter((event) => isCricketLiveStatus(event?.strStatus));
-    const upcomingEvents = sorted.filter((event) => {
+    const filtered = applyCricketFilters(sorted, state.cricket.competitionFilter, state.cricket.genderFilter);
+    const liveEvents = filtered.filter((event) => isCricketLiveStatus(event?.strStatus));
+    const upcomingEvents = filtered.filter((event) => {
       const stamp = new Date(event?.dateEvent || 0).getTime();
       const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
       return stamp >= now && !hasScore && !isCricketLiveStatus(event?.strStatus);
     });
-    const recentEvents = [...sorted]
+    const recentEvents = [...filtered]
       .filter((event) => {
         const stamp = new Date(event?.dateEvent || 0).getTime();
         const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
@@ -4128,6 +4193,33 @@ async function renderCricket() {
     statWrap.className = "card-span-12 stats-row football-stats-row";
     cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
     grid.appendChild(statWrap);
+
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `
+      <article class="glass-card card-span-12 card-entry cricket-filter-card">
+        <div class="cricket-filter-grid">
+          <label>
+            Competition
+            <select id="cricketCompetitionFilter" class="select-input">
+              <option value="all" ${state.cricket.competitionFilter === "all" ? "selected" : ""}>All</option>
+              <option value="international" ${state.cricket.competitionFilter === "international" ? "selected" : ""}>International</option>
+              <option value="league" ${state.cricket.competitionFilter === "league" ? "selected" : ""}>League / Domestic</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <select id="cricketGenderFilter" class="select-input">
+              <option value="all" ${state.cricket.genderFilter === "all" ? "selected" : ""}>All</option>
+              <option value="men" ${state.cricket.genderFilter === "men" ? "selected" : ""}>Men</option>
+              <option value="women" ${state.cricket.genderFilter === "women" ? "selected" : ""}>Women</option>
+            </select>
+          </label>
+          <p class="inline-meta">Cricket data source is open-source endpoint feed (TheSportsDB).</p>
+        </div>
+      </article>
+      `
+    );
 
     const liveRows = liveEvents.slice(0, 6).map((event) => `
       <button class="cricket-match-row live" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(event.strHomeScore || event.intHomeScore || "0"))}" data-cricket-away-score="${escapeHtml(String(event.strAwayScore || event.intAwayScore || "0"))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
@@ -4199,6 +4291,23 @@ async function renderCricket() {
       </article>
       `
     );
+
+    const competitionSelect = qs("#cricketCompetitionFilter");
+    const genderSelect = qs("#cricketGenderFilter");
+    if (competitionSelect) {
+      competitionSelect.onchange = () => {
+        state.cricket.competitionFilter = competitionSelect.value || "all";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    }
+    if (genderSelect) {
+      genderSelect.onchange = () => {
+        state.cricket.genderFilter = genderSelect.value || "all";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    }
 
     renderCricketMomentumChart(recentEvents);
     setupCricketInsightEvents(formBoard);
