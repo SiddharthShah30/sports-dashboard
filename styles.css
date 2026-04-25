@@ -2360,6 +2360,15 @@ body.is-loading .loading-skeleton {
   border-radius: 10px;
   padding: 0.52rem;
   background: rgba(255, 255, 255, 0.04);
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cricket-match-row:hover {
+  border-color: rgba(39, 180, 255, 0.62);
+  background: rgba(39, 180, 255, 0.14);
 }
 
 .cricket-match-row.live {
@@ -2386,6 +2395,15 @@ body.is-loading .loading-skeleton {
   grid-template-columns: 28px 1fr auto auto auto;
   gap: 0.36rem;
   align-items: center;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cricket-form-row:hover {
+  border-color: rgba(39, 180, 255, 0.58);
+  background: rgba(39, 180, 255, 0.12);
 }
 
 .cricket-form-row strong {

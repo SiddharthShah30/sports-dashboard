@@ -493,8 +493,10 @@ async function fetchFootballJSON(path, params = {}) {
     }
 
     const data = await response.json();
-    if (String(data?.errors || "") && Object.keys(data.errors || {}).length) {
-      throw new Error("Football API returned an error payload");
+    const errorEntries = Object.entries(data?.errors || {}).filter(([, value]) => String(value || "").trim());
+    if (errorEntries.length) {
+      const [firstKey, firstValue] = errorEntries[0];
+      throw new Error(`Football API error: ${firstKey} ${firstValue}`.trim());
     }
     return data;
   } finally {
@@ -907,6 +909,131 @@ function renderCricketMomentumChart(events) {
         y: { ticks: { color: "#c7d0e2" }, grid: { color: "rgba(255,255,255,0.08)" } }
       }
     }
+  });
+}
+
+function setupCricketInsightEvents(formBoard = []) {
+  const formLookup = new Map((formBoard || []).map((row) => [row.team, row]));
+
+  qsa(".cricket-match-row[data-cricket-match]").forEach((row) => {
+    row.onclick = () => {
+      const homeTeam = row.dataset.cricketHome || "Home";
+      const awayTeam = row.dataset.cricketAway || "Away";
+      const league = row.dataset.cricketLeague || "League";
+      const status = row.dataset.cricketStatus || "Status";
+      const kickoff = row.dataset.cricketKickoff || "";
+      const homeRuns = parseCricketRuns(row.dataset.cricketHomeScore || "0");
+      const awayRuns = parseCricketRuns(row.dataset.cricketAwayScore || "0");
+      const homeForm = formLookup.get(homeTeam);
+      const awayForm = formLookup.get(awayTeam);
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Match</span><strong>${escapeHtml(homeTeam)} vs ${escapeHtml(awayTeam)}</strong></p>
+          <p><span>League</span><strong>${escapeHtml(league)}</strong></p>
+          <p><span>Status</span><strong>${escapeHtml(status)}</strong></p>
+          <p><span>Scheduled</span><strong>${escapeHtml(footballKickoffLabel(kickoff ? `${kickoff}T00:00:00Z` : ""))}</strong></p>
+          <p><span>Scoreline</span><strong>${escapeHtml(String(homeRuns))} - ${escapeHtml(String(awayRuns))}</strong></p>
+          <p><span>Home Form</span><strong>${homeForm ? `${homeForm.wins}W / ${homeForm.losses}L` : "N/A"}</strong></p>
+          <p><span>Away Form</span><strong>${awayForm ? `${awayForm.wins}W / ${awayForm.losses}L` : "N/A"}</strong></p>
+          <p><span>Points Edge</span><strong>${escapeHtml(String((homeForm?.points || 0) - (awayForm?.points || 0)))}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Cricket match insight chart"></canvas>
+        </div>
+      `;
+
+      openInsightModal(`${homeTeam} vs ${awayTeam} • Cricket Insight`, content);
+
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels: ["Runs", "Form Points", "Wins"],
+          datasets: [
+            {
+              label: homeTeam,
+              data: [homeRuns, homeForm?.points || 0, homeForm?.wins || 0],
+              backgroundColor: "rgba(39, 180, 255, 0.82)",
+              borderRadius: 8,
+              maxBarThickness: 32
+            },
+            {
+              label: awayTeam,
+              data: [awayRuns, awayForm?.points || 0, awayForm?.wins || 0],
+              backgroundColor: "rgba(255, 201, 74, 0.8)",
+              borderRadius: 8,
+              maxBarThickness: 32
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#1f2430" } } },
+          scales: {
+            x: { ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" } },
+            y: { ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" }, beginAtZero: true }
+          }
+        }
+      });
+    };
+  });
+
+  qsa(".cricket-form-row[data-cricket-team]").forEach((row) => {
+    row.onclick = () => {
+      const teamName = row.dataset.cricketTeam || "Team";
+      const profile = formLookup.get(teamName);
+      if (!profile) {
+        return;
+      }
+
+      const netRuns = profile.runsFor - profile.runsAgainst;
+      const content = `
+        <div class="insight-grid">
+          <p><span>Team</span><strong>${escapeHtml(teamName)}</strong></p>
+          <p><span>Played</span><strong>${escapeHtml(String(profile.played))}</strong></p>
+          <p><span>Wins</span><strong>${escapeHtml(String(profile.wins))}</strong></p>
+          <p><span>Losses</span><strong>${escapeHtml(String(profile.losses))}</strong></p>
+          <p><span>Runs For</span><strong>${escapeHtml(String(profile.runsFor))}</strong></p>
+          <p><span>Runs Against</span><strong>${escapeHtml(String(profile.runsAgainst))}</strong></p>
+          <p><span>Net Runs</span><strong>${netRuns >= 0 ? "+" : ""}${escapeHtml(String(netRuns))}</strong></p>
+          <p><span>Points</span><strong>${escapeHtml(String(profile.points))}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Cricket team profile chart"></canvas>
+        </div>
+      `;
+
+      openInsightModal(`${teamName} • Team Form`, content);
+
+      renderInsightChart({
+        type: "radar",
+        data: {
+          labels: ["Wins", "Losses", "Runs For", "Runs Against", "Points"],
+          datasets: [
+            {
+              label: teamName,
+              data: [profile.wins, profile.losses, profile.runsFor, profile.runsAgainst, profile.points],
+              borderColor: "rgba(39, 180, 255, 0.95)",
+              backgroundColor: "rgba(39, 180, 255, 0.22)",
+              pointRadius: 2,
+              pointBackgroundColor: "rgba(39, 180, 255, 0.95)"
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#1f2430" } } },
+          scales: {
+            r: {
+              angleLines: { color: "rgba(0,0,0,0.12)" },
+              grid: { color: "rgba(0,0,0,0.12)" },
+              pointLabels: { color: "#2b3140" },
+              ticks: { color: "#2b3140", backdropColor: "transparent" }
+            }
+          }
+        }
+      });
+    };
   });
 }
 
@@ -3669,7 +3796,7 @@ async function renderFootball() {
     const [fixturesData, scorersData, liveData, leaguePulseData] = await Promise.all([
       fetchFootballJSON("/fixtures", {
         league: featuredLeague.id,
-        next: 8,
+        season: resolvedSeason,
         timezone: timezoneForApi
       }),
       fetchFootballJSON("/players/topscorers", {
@@ -3685,14 +3812,14 @@ async function renderFootball() {
       )
     ]);
 
-    let upcomingFixtures = fixturesData?.response || [];
+    const allSeasonFixtures = fixturesData?.response || [];
+    const nowTs = Date.now();
+    let upcomingFixtures = allSeasonFixtures
+      .filter((match) => new Date(match?.fixture?.date || 0).getTime() >= nowTs)
+      .sort((a, b) => new Date(a?.fixture?.date || 0).getTime() - new Date(b?.fixture?.date || 0).getTime())
+      .slice(0, 8);
     if (!upcomingFixtures.length) {
-      const fallbackFixtures = await fetchFootballJSON("/fixtures", {
-        league: featuredLeague.id,
-        season: resolvedSeason,
-        timezone: timezoneForApi
-      });
-      upcomingFixtures = (fallbackFixtures?.response || []).slice(-8).reverse();
+      upcomingFixtures = [...allSeasonFixtures].slice(-8).reverse();
     }
     const topScorers = (scorersData?.response || []).slice(0, 6);
     const liveFixtures = liveData?.response || [];
@@ -4003,41 +4130,41 @@ async function renderCricket() {
     grid.appendChild(statWrap);
 
     const liveRows = liveEvents.slice(0, 6).map((event) => `
-      <div class="cricket-match-row live">
+      <button class="cricket-match-row live" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(event.strHomeScore || event.intHomeScore || "0"))}" data-cricket-away-score="${escapeHtml(String(event.strAwayScore || event.intAwayScore || "0"))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
         <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
         <p>${escapeHtml(event.strLeague || "League")} • ${escapeHtml(event.strStatus || "Live")}</p>
         <p class="inline-meta">${escapeHtml(String(event.strHomeScore || event.intHomeScore || "-"))} / ${escapeHtml(String(event.strAwayScore || event.intAwayScore || "-"))}</p>
-      </div>
+      </button>
     `).join("");
 
     const upcomingRows = upcomingEvents.slice(0, 8).map((event) => `
-      <div class="cricket-match-row">
+      <button class="cricket-match-row" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "Scheduled")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(event.strHomeScore || event.intHomeScore || "0"))}" data-cricket-away-score="${escapeHtml(String(event.strAwayScore || event.intAwayScore || "0"))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
         <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
         <p>${escapeHtml(event.strLeague || "League")}</p>
         <p class="inline-meta">${escapeHtml(footballKickoffLabel(`${event.dateEvent}T${event.strTime || "00:00:00Z"}`))}</p>
-      </div>
+      </button>
     `).join("");
 
     const recentRows = recentEvents.slice(0, 8).map((event) => {
       const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
       const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
       return `
-        <div class="cricket-match-row">
+        <button class="cricket-match-row" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "Completed")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(homeRuns))}" data-cricket-away-score="${escapeHtml(String(awayRuns))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
           <strong>${escapeHtml(event.strHomeTeam || "Home")} ${homeRuns} - ${awayRuns} ${escapeHtml(event.strAwayTeam || "Away")}</strong>
           <p>${escapeHtml(event.strLeague || "League")}</p>
           <p class="inline-meta">${escapeHtml(event.strStatus || "Completed")}</p>
-        </div>
+        </button>
       `;
     }).join("");
 
     const formRows = formBoard.map((row, idx) => `
-      <div class="cricket-form-row">
+      <button class="cricket-form-row" type="button" data-cricket-team="${escapeHtml(row.team)}" aria-label="Open form insight for ${escapeHtml(row.team)}">
         <span>${idx + 1}</span>
         <strong>${escapeHtml(row.team)}</strong>
         <span>${row.played}P</span>
         <span>${row.wins}W</span>
         <span>${row.points}pts</span>
-      </div>
+      </button>
     `).join("");
 
     grid.insertAdjacentHTML(
@@ -4074,6 +4201,7 @@ async function renderCricket() {
     );
 
     renderCricketMomentumChart(recentEvents);
+    setupCricketInsightEvents(formBoard);
   } catch (error) {
     console.error("renderCricket failed", error);
     const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown cricket data error";
