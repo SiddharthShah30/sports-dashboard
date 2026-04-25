@@ -59,6 +59,14 @@ const state = {
     liveFixtures: [],
     pointsChart: null,
     lastUpdated: ""
+  },
+  cricket: {
+    events: [],
+    liveEvents: [],
+    upcomingEvents: [],
+    recentEvents: [],
+    momentumChart: null,
+    lastUpdated: ""
   }
 };
 
@@ -146,6 +154,10 @@ const FOOTBALL_LEAGUES = [
   { id: 140, code: "LL", name: "La Liga", country: "Spain" },
   { id: 135, code: "SA", name: "Serie A", country: "Italy" }
 ];
+
+const CRICKET_API = {
+  baseUrl: "https://www.thesportsdb.com/api/v1/json/3"
+};
 
 const TRACK_PATHS = {
   bahrain: "M30 80 L90 30 L180 35 L240 55 L255 90 L230 120 L160 125 L120 110 L100 85 L70 95 L45 110",
@@ -518,6 +530,384 @@ function destroyFootballChart() {
     state.football.pointsChart.destroy();
     state.football.pointsChart = null;
   }
+}
+
+async function fetchFootballStandingsWithFallback(leagueId, preferredSeason) {
+  const candidates = [preferredSeason, preferredSeason - 1, preferredSeason - 2]
+    .filter((value, idx, arr) => Number.isFinite(value) && arr.indexOf(value) === idx);
+
+  let lastData = null;
+  for (const season of candidates) {
+    const data = await fetchFootballJSON("/standings", { league: leagueId, season });
+    const table = data?.response?.[0]?.league?.standings?.[0] || [];
+    if (table.length) {
+      return { season, data, table };
+    }
+    lastData = data;
+  }
+
+  return {
+    season: preferredSeason,
+    data: lastData,
+    table: []
+  };
+}
+
+function bindInsightModalClose() {
+  const refs = getInsightModalRefs();
+  if (!refs) {
+    return;
+  }
+
+  const close = () => {
+    refs.modal.classList.add("hidden");
+    if (state.f1.insightChart) {
+      state.f1.insightChart.destroy();
+      state.f1.insightChart = null;
+    }
+  };
+
+  refs.closeBtn.onclick = () => {
+    close();
+    triggerMicroFeedback();
+  };
+  refs.modal.onclick = (event) => {
+    if (event.target === refs.modal) {
+      close();
+    }
+  };
+}
+
+function formLettersToPoints(formText = "") {
+  return String(formText)
+    .slice(-5)
+    .split("")
+    .filter(Boolean)
+    .map((symbol) => {
+      if (symbol === "W") {
+        return 3;
+      }
+      if (symbol === "D") {
+        return 1;
+      }
+      return 0;
+    });
+}
+
+function setupFootballInsightEvents({ featuredLeague, standingsTable, upcomingFixtures, topScorers }) {
+  qsa(".football-standings-row[data-football-team-id]").forEach((row) => {
+    row.onclick = () => {
+      const teamName = row.dataset.footballTeamName || "Team";
+      const rank = row.dataset.footballRank || "-";
+      const points = row.dataset.footballPoints || "0";
+      const goalDiff = row.dataset.footballGd || "0";
+      const form = row.dataset.footballForm || "";
+      const wins = row.dataset.footballWin || "0";
+      const draws = row.dataset.footballDraw || "0";
+      const losses = row.dataset.footballLoss || "0";
+      const goalsFor = row.dataset.footballGf || "0";
+      const goalsAgainst = row.dataset.footballGa || "0";
+      const formText = String(form).split("").join(" • ") || "Not available";
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>League</span><strong>${escapeHtml(featuredLeague.name)}</strong></p>
+          <p><span>Current Rank</span><strong>P${escapeHtml(rank)}</strong></p>
+          <p><span>Points</span><strong>${escapeHtml(points)}</strong></p>
+          <p><span>Goal Difference</span><strong>${toNum(goalDiff) > 0 ? "+" : ""}${escapeHtml(goalDiff)}</strong></p>
+          <p><span>Record</span><strong>${escapeHtml(`${wins}W • ${draws}D • ${losses}L`)}</strong></p>
+          <p><span>Goals</span><strong>${escapeHtml(`${goalsFor} For / ${goalsAgainst} Against`)}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Team analytics chart"></canvas>
+        </div>
+        <p class="insight-note">Recent form sequence: ${escapeHtml(formText)}</p>
+      `;
+
+      openInsightModal(`${teamName} • Team Analytics`, content);
+
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels: ["Wins", "Draws", "Losses", "GF", "GA"],
+          datasets: [
+            {
+              label: "Season Totals",
+              data: [toNum(wins), toNum(draws), toNum(losses), toNum(goalsFor), toNum(goalsAgainst)],
+              backgroundColor: [
+                "rgba(33, 201, 107, 0.85)",
+                "rgba(255, 201, 74, 0.82)",
+                "rgba(255, 91, 91, 0.82)",
+                "rgba(84, 173, 255, 0.84)",
+                "rgba(186, 146, 255, 0.8)"
+              ],
+              borderRadius: 8,
+              maxBarThickness: 32
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#1f2430" } } },
+          scales: {
+            x: { ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" } },
+            y: { beginAtZero: true, ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" } }
+          }
+        }
+      });
+    };
+  });
+
+  qsa(".football-fixture-row[data-football-fixture-id]").forEach((button) => {
+    button.onclick = () => {
+      const homeName = button.dataset.footballHomeName || "Home";
+      const awayName = button.dataset.footballAwayName || "Away";
+      const kickoff = button.dataset.footballKickoff || "";
+      const venue = button.dataset.footballVenue || "Venue TBA";
+      const round = button.dataset.footballRound || "Round TBD";
+      const status = button.dataset.footballStatus || "Scheduled";
+
+      const homeStats = standingsTable.find((row) => String(row?.team?.id) === String(button.dataset.footballHomeId));
+      const awayStats = standingsTable.find((row) => String(row?.team?.id) === String(button.dataset.footballAwayId));
+      const homeFormSeries = formLettersToPoints(homeStats?.form || "");
+      const awayFormSeries = formLettersToPoints(awayStats?.form || "");
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Match</span><strong>${escapeHtml(homeName)} vs ${escapeHtml(awayName)}</strong></p>
+          <p><span>Kickoff</span><strong>${escapeHtml(footballKickoffLabel(kickoff))}</strong></p>
+          <p><span>Venue</span><strong>${escapeHtml(venue)}</strong></p>
+          <p><span>Round</span><strong>${escapeHtml(round)}</strong></p>
+          <p><span>Status</span><strong>${escapeHtml(status)}</strong></p>
+          <p><span>League</span><strong>${escapeHtml(featuredLeague.name)}</strong></p>
+          <p><span>Home Table</span><strong>${homeStats ? `P${homeStats.rank} • ${homeStats.points} pts` : "Unavailable"}</strong></p>
+          <p><span>Away Table</span><strong>${awayStats ? `P${awayStats.rank} • ${awayStats.points} pts` : "Unavailable"}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Fixture comparison chart"></canvas>
+        </div>
+      `;
+
+      openInsightModal(`${homeName} vs ${awayName} • Match Insight`, content);
+
+      renderInsightChart({
+        type: "bar",
+        data: {
+          labels: ["Table Points", "Goal Diff", "Form Last 5"],
+          datasets: [
+            {
+              label: homeName,
+              data: [
+                toNum(homeStats?.points),
+                toNum(homeStats?.goalsDiff),
+                homeFormSeries.reduce((sum, value) => sum + value, 0)
+              ],
+              backgroundColor: "rgba(33, 201, 107, 0.78)",
+              borderRadius: 8,
+              maxBarThickness: 30
+            },
+            {
+              label: awayName,
+              data: [
+                toNum(awayStats?.points),
+                toNum(awayStats?.goalsDiff),
+                awayFormSeries.reduce((sum, value) => sum + value, 0)
+              ],
+              backgroundColor: "rgba(84, 173, 255, 0.76)",
+              borderRadius: 8,
+              maxBarThickness: 30
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#1f2430" } } },
+          scales: {
+            x: { ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" } },
+            y: { ticks: { color: "#2b3140" }, grid: { color: "rgba(0,0,0,0.08)" } }
+          }
+        }
+      });
+    };
+  });
+
+  qsa(".football-scorer-row[data-football-player-id]").forEach((row) => {
+    row.onclick = () => {
+      const player = row.dataset.footballPlayerName || "Player";
+      const team = row.dataset.footballTeamName || "Team";
+      const goals = toNum(row.dataset.footballGoals);
+      const assists = toNum(row.dataset.footballAssists);
+      const shots = toNum(row.dataset.footballShots);
+      const shotsOn = toNum(row.dataset.footballShotsOn);
+      const penalties = toNum(row.dataset.footballPens);
+      const appearances = toNum(row.dataset.footballApps);
+      const minutes = toNum(row.dataset.footballMinutes);
+      const contribution = goals + assists;
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Player</span><strong>${escapeHtml(player)}</strong></p>
+          <p><span>Club</span><strong>${escapeHtml(team)}</strong></p>
+          <p><span>Goals</span><strong>${escapeHtml(String(goals))}</strong></p>
+          <p><span>Assists</span><strong>${escapeHtml(String(assists))}</strong></p>
+          <p><span>Goal Contributions</span><strong>${escapeHtml(String(contribution))}</strong></p>
+          <p><span>Appearances</span><strong>${escapeHtml(String(appearances))}</strong></p>
+          <p><span>Minutes</span><strong>${escapeHtml(String(minutes))}</strong></p>
+          <p><span>Shots / On Target</span><strong>${escapeHtml(`${shots} / ${shotsOn}`)}</strong></p>
+          <p><span>Penalties Scored</span><strong>${escapeHtml(String(penalties))}</strong></p>
+        </div>
+        <div class="insight-chart-wrap">
+          <canvas id="insightChartCanvas" aria-label="Scorer profile chart"></canvas>
+        </div>
+      `;
+
+      openInsightModal(`${player} • Scorer Breakdown`, content);
+
+      renderInsightChart({
+        type: "radar",
+        data: {
+          labels: ["Goals", "Assists", "Shots", "On Target", "Penalties"],
+          datasets: [
+            {
+              label: player,
+              data: [goals, assists, shots, shotsOn, penalties],
+              borderColor: "rgba(33, 201, 107, 0.95)",
+              backgroundColor: "rgba(33, 201, 107, 0.25)",
+              pointBackgroundColor: "rgba(33, 201, 107, 0.95)",
+              pointRadius: 2
+            }
+          ]
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#1f2430" } } },
+          scales: {
+            r: {
+              angleLines: { color: "rgba(0,0,0,0.12)" },
+              grid: { color: "rgba(0,0,0,0.12)" },
+              pointLabels: { color: "#2b3140" },
+              ticks: { color: "#2b3140", backdropColor: "transparent" }
+            }
+          }
+        }
+      });
+    };
+  });
+}
+
+async function fetchSportsDbJSON(path, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const url = `${CRICKET_API.baseUrl}${path}${query.toString() ? `?${query}` : ""}`;
+  return fetchJSON(url);
+}
+
+function cricketDateOffset(days = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isCricketLiveStatus(statusText = "") {
+  const text = String(statusText || "").toLowerCase();
+  return ["live", "in progress", "stumps", "lunch", "tea", "innings break", "delay", "no result"].some((term) => text.includes(term));
+}
+
+function parseCricketRuns(value) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  const fromText = String(value || "").match(/\d+/);
+  return fromText ? Number(fromText[0]) : 0;
+}
+
+function destroyCricketChart() {
+  if (state.cricket.momentumChart) {
+    state.cricket.momentumChart.destroy();
+    state.cricket.momentumChart = null;
+  }
+}
+
+function buildCricketFormTable(events) {
+  const board = new Map();
+  (events || []).forEach((event) => {
+    const home = event?.strHomeTeam;
+    const away = event?.strAwayTeam;
+    const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+    const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+    if (!home || !away || (!homeRuns && !awayRuns)) {
+      return;
+    }
+
+    const apply = (team, runsFor, runsAgainst, won) => {
+      if (!board.has(team)) {
+        board.set(team, { team, played: 0, wins: 0, losses: 0, runsFor: 0, runsAgainst: 0, points: 0 });
+      }
+      const row = board.get(team);
+      row.played += 1;
+      row.runsFor += runsFor;
+      row.runsAgainst += runsAgainst;
+      if (won) {
+        row.wins += 1;
+        row.points += 2;
+      } else {
+        row.losses += 1;
+      }
+    };
+
+    apply(home, homeRuns, awayRuns, homeRuns >= awayRuns);
+    apply(away, awayRuns, homeRuns, awayRuns > homeRuns);
+  });
+
+  return Array.from(board.values())
+    .sort((a, b) => b.points - a.points || (b.runsFor - b.runsAgainst) - (a.runsFor - a.runsAgainst))
+    .slice(0, 8);
+}
+
+function renderCricketMomentumChart(events) {
+  const canvas = qs("#cricketMomentumChart");
+  if (!canvas || typeof Chart === "undefined") {
+    return;
+  }
+  destroyCricketChart();
+
+  const sample = (events || []).slice(0, 6).reverse();
+  const labels = sample.map((event) => `${(event?.strHomeTeam || "Home").slice(0, 3)}-${(event?.strAwayTeam || "Away").slice(0, 3)}`);
+  const runTotals = sample.map((event) => parseCricketRuns(event?.intHomeScore || event?.strHomeScore) + parseCricketRuns(event?.intAwayScore || event?.strAwayScore));
+
+  state.cricket.momentumChart = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Total Runs",
+          data: runTotals,
+          borderColor: "rgba(39, 180, 255, 0.95)",
+          backgroundColor: "rgba(39, 180, 255, 0.2)",
+          tension: 0.26,
+          fill: true,
+          pointRadius: 2,
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#d5ddef" } }
+      },
+      scales: {
+        x: { ticks: { color: "#c7d0e2" }, grid: { color: "rgba(255,255,255,0.08)" } },
+        y: { ticks: { color: "#c7d0e2" }, grid: { color: "rgba(255,255,255,0.08)" } }
+      }
+    }
+  });
 }
 
 function renderFootballPointsChart(tableRows, leagueName) {
@@ -2783,6 +3173,7 @@ function openInsightModal(title, content) {
   if (!refs) {
     return;
   }
+  bindInsightModalClose();
   if (state.f1.insightChart) {
     state.f1.insightChart.destroy();
     state.f1.insightChart = null;
@@ -3271,36 +3662,38 @@ async function renderFootball() {
   try {
     const featuredLeague = FOOTBALL_LEAGUES.find((league) => league.id === state.football.featuredLeagueId) || FOOTBALL_LEAGUES[0];
     const timezoneForApi = state.timezone === "TRACK_AUTO" ? "UTC" : (state.timezone || "Asia/Kolkata");
+    const standingsPack = await fetchFootballStandingsWithFallback(featuredLeague.id, state.football.season);
+    const resolvedSeason = standingsPack.season;
+    const standingsTable = standingsPack.table;
 
-    const [standingsData, fixturesData, scorersData, liveData, leaguePulseData] = await Promise.all([
-      fetchFootballJSON("/standings", {
-        league: featuredLeague.id,
-        season: state.football.season
-      }),
+    const [fixturesData, scorersData, liveData, leaguePulseData] = await Promise.all([
       fetchFootballJSON("/fixtures", {
         league: featuredLeague.id,
-        season: state.football.season,
         next: 8,
         timezone: timezoneForApi
       }),
       fetchFootballJSON("/players/topscorers", {
         league: featuredLeague.id,
-        season: state.football.season
+        season: resolvedSeason
       }),
       fetchFootballJSON("/fixtures", {
         live: "all",
         timezone: timezoneForApi
       }),
       Promise.allSettled(
-        FOOTBALL_LEAGUES.map((league) => fetchFootballJSON("/standings", {
-          league: league.id,
-          season: state.football.season
-        }))
+        FOOTBALL_LEAGUES.map((league) => fetchFootballStandingsWithFallback(league.id, resolvedSeason))
       )
     ]);
 
-    const standingsTable = standingsData?.response?.[0]?.league?.standings?.[0] || [];
-    const upcomingFixtures = fixturesData?.response || [];
+    let upcomingFixtures = fixturesData?.response || [];
+    if (!upcomingFixtures.length) {
+      const fallbackFixtures = await fetchFootballJSON("/fixtures", {
+        league: featuredLeague.id,
+        season: resolvedSeason,
+        timezone: timezoneForApi
+      });
+      upcomingFixtures = (fallbackFixtures?.response || []).slice(-8).reverse();
+    }
     const topScorers = (scorersData?.response || []).slice(0, 6);
     const liveFixtures = liveData?.response || [];
     const leader = standingsTable[0] || null;
@@ -3315,9 +3708,10 @@ async function renderFootball() {
     state.football.topScorers = topScorers;
     state.football.liveFixtures = liveFixtures;
     state.football.lastUpdated = new Date().toISOString();
+    state.football.season = resolvedSeason;
 
     const tickerItems = [
-      `${featuredLeague.name} season ${state.football.season}/${state.football.season + 1}`,
+      `${featuredLeague.name} season ${resolvedSeason}/${resolvedSeason + 1}`,
       leader ? `Leader ${leader.team.name} (${leader.points} pts)` : "Leader unavailable",
       topScorer ? `Golden Boot: ${topScorer.player.name} (${topScorer.statistics?.[0]?.goals?.total || 0})` : "Top scorer unavailable",
       nextFixture
@@ -3373,7 +3767,7 @@ async function renderFootball() {
       }).join("");
 
       return `
-        <div class="football-standings-row">
+        <button class="football-standings-row" type="button" data-football-team-id="${escapeHtml(String(row.team?.id || ""))}" data-football-team-name="${escapeHtml(row.team?.name || "")}" data-football-rank="${escapeHtml(String(row.rank || ""))}" data-football-points="${escapeHtml(String(row.points || ""))}" data-football-gd="${escapeHtml(String(row.goalsDiff || ""))}" data-football-form="${escapeHtml(String(row.form || ""))}" data-football-win="${escapeHtml(String(row.all?.win || "0"))}" data-football-draw="${escapeHtml(String(row.all?.draw || "0"))}" data-football-loss="${escapeHtml(String(row.all?.lose || "0"))}" data-football-gf="${escapeHtml(String(row.all?.goals?.for || "0"))}" data-football-ga="${escapeHtml(String(row.all?.goals?.against || "0"))}" aria-label="Open analytics for ${escapeHtml(row.team?.name || "team")}">
           <span class="football-rank">${escapeHtml(String(row.rank || "-"))}</span>
           <span class="football-team">
             <img src="${escapeHtml(row.team?.logo || "")}" alt="${escapeHtml(row.team?.name || "Team")}" loading="lazy" onerror="this.style.display='none'" />
@@ -3382,15 +3776,16 @@ async function renderFootball() {
           <span class="football-points">${escapeHtml(String(row.points || 0))}</span>
           <span class="football-gd">${toNum(row.goalsDiff) > 0 ? "+" : ""}${escapeHtml(String(row.goalsDiff || 0))}</span>
           <span class="football-form">${formBadges || "--"}</span>
-        </div>
+        </button>
       `;
     }).join("");
 
     const fixtureRows = upcomingFixtures.slice(0, 6).map((match) => {
       const statusLong = match?.fixture?.status?.long || "Scheduled";
       const venue = match?.fixture?.venue?.name || "Venue TBA";
+      const round = match?.league?.round || "Round TBD";
       return `
-        <button class="football-fixture-row" type="button" aria-label="${escapeHtml(match.teams.home.name)} versus ${escapeHtml(match.teams.away.name)}">
+        <button class="football-fixture-row" data-football-fixture-id="${escapeHtml(String(match?.fixture?.id || ""))}" data-football-home-id="${escapeHtml(String(match?.teams?.home?.id || ""))}" data-football-away-id="${escapeHtml(String(match?.teams?.away?.id || ""))}" data-football-home-name="${escapeHtml(match?.teams?.home?.name || "")}" data-football-away-name="${escapeHtml(match?.teams?.away?.name || "")}" data-football-kickoff="${escapeHtml(match?.fixture?.date || "")}" data-football-venue="${escapeHtml(venue)}" data-football-round="${escapeHtml(round)}" data-football-status="${escapeHtml(statusLong)}" type="button" aria-label="${escapeHtml(match.teams.home.name)} versus ${escapeHtml(match.teams.away.name)}">
           <div class="football-fixture-main">
             <div class="football-team-inline">
               <img src="${escapeHtml(match.teams.home.logo || "")}" alt="${escapeHtml(match.teams.home.name)}" loading="lazy" onerror="this.style.display='none'" />
@@ -3411,17 +3806,22 @@ async function renderFootball() {
     const scorerRows = topScorers.map((entry, idx) => {
       const goals = entry?.statistics?.[0]?.goals?.total || 0;
       const assists = entry?.statistics?.[0]?.goals?.assists || 0;
+      const shots = entry?.statistics?.[0]?.shots?.total || 0;
+      const shotsOn = entry?.statistics?.[0]?.shots?.on || 0;
+      const penalties = entry?.statistics?.[0]?.penalty?.scored || 0;
+      const appearances = entry?.statistics?.[0]?.games?.appearences || 0;
+      const minutes = entry?.statistics?.[0]?.games?.minutes || 0;
       const team = entry?.statistics?.[0]?.team?.name || "Club";
       const playerPhoto = entry?.player?.photo || "";
       return `
-        <div class="football-scorer-row">
+        <button class="football-scorer-row" data-football-player-id="${escapeHtml(String(entry?.player?.id || ""))}" data-football-player-name="${escapeHtml(entry?.player?.name || "")}" data-football-team-name="${escapeHtml(team)}" data-football-goals="${escapeHtml(String(goals))}" data-football-assists="${escapeHtml(String(assists))}" data-football-shots="${escapeHtml(String(shots))}" data-football-shots-on="${escapeHtml(String(shotsOn))}" data-football-pens="${escapeHtml(String(penalties))}" data-football-apps="${escapeHtml(String(appearances))}" data-football-minutes="${escapeHtml(String(minutes))}" type="button" aria-label="Open scorer insight for ${escapeHtml(entry?.player?.name || "player")}">
           <span class="football-rank">${idx + 1}</span>
           <img src="${escapeHtml(playerPhoto)}" alt="${escapeHtml(entry?.player?.name || "Player")}" loading="lazy" onerror="this.style.display='none'" />
           <div>
             <strong>${escapeHtml(entry?.player?.name || "Player")}</strong>
             <p>${escapeHtml(team)} | ${goals}G / ${assists}A</p>
           </div>
-        </div>
+        </button>
       `;
     }).join("");
 
@@ -3431,7 +3831,7 @@ async function renderFootball() {
           return "";
         }
         const league = FOOTBALL_LEAGUES[index];
-        const snapshot = result.value?.response?.[0]?.league?.standings?.[0]?.[0];
+        const snapshot = result.value?.table?.[0] || null;
         if (!league || !snapshot) {
           return "";
         }
@@ -3483,6 +3883,12 @@ async function renderFootball() {
     );
 
     renderFootballPointsChart(standingsTable, featuredLeague.name);
+    setupFootballInsightEvents({
+      featuredLeague,
+      standingsTable,
+      upcomingFixtures,
+      topScorers
+    });
   } catch (error) {
     console.error("renderFootball failed", error);
     const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown football data error";
@@ -3507,53 +3913,189 @@ async function renderFootball() {
   }
 }
 
-function renderCricket() {
+async function renderCricket() {
   const grid = qs("#dashboardGrid");
   grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  destroyCricketChart();
+  setLoadingState(true);
   updateLiveHUD({
-    raceName: "Formula 1 module inactive",
-    localTime: "--",
-    countdown: "Switch to F1",
-    weather: "--",
+    raceName: "Loading cricket intelligence",
+    localTime: "Syncing",
+    countdown: "Fetching fixtures",
+    weather: "Syncing",
     seasonCompleted: 0,
     seasonTotal: 0
   });
 
-  const cards = [
-    { title: "ICC Ranking Lead", value: "India +17", subtitle: "Points over #2" },
-    { title: "Live Overs", value: "42.3", subtitle: "Current innings" },
-    { title: "Strike Burst", value: "164.2", subtitle: "Powerplay tempo" }
-  ];
+  try {
+    const dateOffsets = [-2, -1, 0, 1, 2, 3, 4];
+    const responses = await Promise.all(
+      dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Cricket" }))
+    );
 
-  const statWrap = document.createElement("section");
-  statWrap.className = "card-span-12 stats-row";
-  cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
-  grid.appendChild(statWrap);
+    const events = responses
+      .flatMap((response) => response?.events || [])
+      .filter((event) => String(event?.strSport || "").toLowerCase() === "cricket");
+    const deduped = Array.from(new Map(events.map((event) => [event.idEvent, event])).values());
+    const now = Date.now();
 
-  grid.insertAdjacentHTML(
-    "beforeend",
-    `
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Wagon Wheel Zones</h3>
-      <p class="empty-state">Render scoring vectors from ball-by-ball coordinates when data source is attached.</p>
-      <div class="track-map">
-        <svg viewBox="0 0 280 160" role="img" aria-label="Cricket wagon wheel placeholder">
-          <circle cx="140" cy="80" r="58" fill="none" stroke="rgba(0,0,0,0.32)" stroke-width="2"></circle>
-          <line x1="140" y1="80" x2="212" y2="62" stroke="#1459d9" stroke-width="3"></line>
-          <line x1="140" y1="80" x2="80" y2="48" stroke="#e63926" stroke-width="3"></line>
-          <line x1="140" y1="80" x2="148" y2="20" stroke="#f1c40f" stroke-width="3"></line>
-        </svg>
+    const sorted = deduped.sort((a, b) => new Date(a?.dateEvent || 0).getTime() - new Date(b?.dateEvent || 0).getTime());
+    const liveEvents = sorted.filter((event) => isCricketLiveStatus(event?.strStatus));
+    const upcomingEvents = sorted.filter((event) => {
+      const stamp = new Date(event?.dateEvent || 0).getTime();
+      const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
+      return stamp >= now && !hasScore && !isCricketLiveStatus(event?.strStatus);
+    });
+    const recentEvents = [...sorted]
+      .filter((event) => {
+        const stamp = new Date(event?.dateEvent || 0).getTime();
+        const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
+        return stamp <= now && hasScore;
+      })
+      .reverse();
+
+    const formBoard = buildCricketFormTable(recentEvents.slice(0, 36));
+    const leadLive = liveEvents[0] || upcomingEvents[0] || recentEvents[0] || null;
+    const topRunMatch = recentEvents[0]
+      ? recentEvents.reduce((best, event) => {
+        const total = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) + parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+        return total > best.total ? { total, event } : best;
+      }, { total: 0, event: null })
+      : { total: 0, event: null };
+
+    state.cricket.events = sorted;
+    state.cricket.liveEvents = liveEvents;
+    state.cricket.upcomingEvents = upcomingEvents;
+    state.cricket.recentEvents = recentEvents;
+    state.cricket.lastUpdated = new Date().toISOString();
+
+    updateLiveHUD({
+      raceName: leadLive ? `${leadLive.strLeague || "Cricket"} Center` : "Cricket Center",
+      country: leadLive?.strCountry || "India",
+      localTime: footballKickoffLabel(new Date().toISOString()),
+      countdown: leadLive?.dateEvent ? formatCountdown(`${leadLive.dateEvent}T${leadLive.strTime || "00:00:00Z"}`) : "Next toss TBD",
+      weather: `${liveEvents.length} live matches`,
+      seasonCompleted: recentEvents.length,
+      seasonTotal: Math.max(recentEvents.length + upcomingEvents.length, 20),
+      tickerItems: [
+        liveEvents.length ? `${liveEvents.length} live scoreboards running` : "No live matches at this moment",
+        upcomingEvents[0] ? `${upcomingEvents[0].strHomeTeam} vs ${upcomingEvents[0].strAwayTeam} next` : "Upcoming fixtures loading",
+        formBoard[0] ? `Form leader: ${formBoard[0].team} (${formBoard[0].points} pts)` : "Form table building",
+        topRunMatch.event ? `Highest recent run aggregate ${topRunMatch.total} in ${topRunMatch.event.strEvent}` : "Run-rate feed warming"
+      ]
+    });
+
+    const cards = [
+      { title: "Live Match Centers", value: String(liveEvents.length), subtitle: "Active live scorecards" },
+      { title: "Upcoming Fixtures", value: String(upcomingEvents.length), subtitle: "Next 4 days window" },
+      { title: "Completed Matches", value: String(recentEvents.length), subtitle: "Recent scored fixtures" },
+      {
+        title: "Top Aggregate",
+        value: topRunMatch.event ? `${topRunMatch.total} runs` : "Pending",
+        subtitle: topRunMatch.event ? `${topRunMatch.event.strHomeTeam} vs ${topRunMatch.event.strAwayTeam}` : "Awaiting scored events"
+      }
+    ];
+
+    const statWrap = document.createElement("section");
+    statWrap.className = "card-span-12 stats-row football-stats-row";
+    cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
+    grid.appendChild(statWrap);
+
+    const liveRows = liveEvents.slice(0, 6).map((event) => `
+      <div class="cricket-match-row live">
+        <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
+        <p>${escapeHtml(event.strLeague || "League")} • ${escapeHtml(event.strStatus || "Live")}</p>
+        <p class="inline-meta">${escapeHtml(String(event.strHomeScore || event.intHomeScore || "-"))} / ${escapeHtml(String(event.strAwayScore || event.intAwayScore || "-"))}</p>
       </div>
-    </article>
+    `).join("");
 
-    <article class="glass-card card-span-6 card-entry">
-      <h3 class="card-title">Adapter Endpoint</h3>
-      <p class="empty-state">Attach CricketData.org or Cricbuzz API via RapidAPI and normalize events into over-by-over cards.</p>
-      <pre class="code-callout">fetch("https://api.cricapi.com/v1/currentMatches?apikey=YOUR_KEY&offset=0");</pre>
-    </article>
-    `
-  );
+    const upcomingRows = upcomingEvents.slice(0, 8).map((event) => `
+      <div class="cricket-match-row">
+        <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
+        <p>${escapeHtml(event.strLeague || "League")}</p>
+        <p class="inline-meta">${escapeHtml(footballKickoffLabel(`${event.dateEvent}T${event.strTime || "00:00:00Z"}`))}</p>
+      </div>
+    `).join("");
+
+    const recentRows = recentEvents.slice(0, 8).map((event) => {
+      const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+      const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+      return `
+        <div class="cricket-match-row">
+          <strong>${escapeHtml(event.strHomeTeam || "Home")} ${homeRuns} - ${awayRuns} ${escapeHtml(event.strAwayTeam || "Away")}</strong>
+          <p>${escapeHtml(event.strLeague || "League")}</p>
+          <p class="inline-meta">${escapeHtml(event.strStatus || "Completed")}</p>
+        </div>
+      `;
+    }).join("");
+
+    const formRows = formBoard.map((row, idx) => `
+      <div class="cricket-form-row">
+        <span>${idx + 1}</span>
+        <strong>${escapeHtml(row.team)}</strong>
+        <span>${row.played}P</span>
+        <span>${row.wins}W</span>
+        <span>${row.points}pts</span>
+      </div>
+    `).join("");
+
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `
+      <article class="glass-card card-span-6 card-entry cricket-card-glow">
+        <h3 class="card-title">Live Scoreboard</h3>
+        <div class="cricket-match-list">${liveRows || "<p class='empty-state'>No live matches in this window.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-6 card-entry cricket-card-glow">
+        <h3 class="card-title">Upcoming Fixtures</h3>
+        <div class="cricket-match-list">${upcomingRows || "<p class='empty-state'>No upcoming fixtures found.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-8 card-entry cricket-card-glow">
+        <h3 class="card-title">Recent Results</h3>
+        <div class="cricket-match-list">${recentRows || "<p class='empty-state'>Recent results unavailable.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-4 card-entry cricket-card-glow">
+        <h3 class="card-title">Form Table (Window)</h3>
+        <div class="cricket-form-list">${formRows || "<p class='empty-state'>Form table unavailable.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-12 card-entry cricket-card-glow">
+        <h3 class="card-title">Run Momentum Trend</h3>
+        <div class="cricket-chart-wrap">
+          <canvas id="cricketMomentumChart" aria-label="Cricket run momentum chart"></canvas>
+        </div>
+        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.cricket.lastUpdated))}. Data source: TheSportsDB cricket day feeds.</p>
+      </article>
+      `
+    );
+
+    renderCricketMomentumChart(recentEvents);
+  } catch (error) {
+    console.error("renderCricket failed", error);
+    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown cricket data error";
+    updateLiveHUD({
+      raceName: "Cricket feed issue",
+      localTime: "Unavailable",
+      countdown: "Unavailable",
+      weather: "Unavailable",
+      seasonCompleted: 0,
+      seasonTotal: 0,
+      tickerItems: ["Cricket services offline", "Check endpoint availability or CORS"]
+    });
+    grid.innerHTML = `
+      <article class="glass-card card-span-12 card-entry">
+        <h3 class="card-title">Cricket Data Stream Interrupted</h3>
+        <p class="empty-state">Unable to load cricket data now. Retry shortly; the module is wired and ready.</p>
+        <p class="inline-meta">Debug: ${reason}</p>
+      </article>
+    `;
+  } finally {
+    setLoadingState(false);
+  }
 }
 
 function renderNBA() {
@@ -3619,6 +4161,9 @@ function renderModule() {
   }
   if (state.activeModule !== "football") {
     destroyFootballChart();
+  }
+  if (state.activeModule !== "cricket") {
+    destroyCricketChart();
   }
 
   switch (state.activeModule) {

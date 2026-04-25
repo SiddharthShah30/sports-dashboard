@@ -2131,6 +2131,15 @@ body.is-loading .loading-skeleton {
   border-radius: 10px;
   padding: 0.46rem;
   background: rgba(255, 255, 255, 0.04);
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.football-standings-row:hover {
+  border-color: rgba(33, 201, 107, 0.6);
+  background: rgba(33, 201, 107, 0.12);
 }
 
 .football-rank,
@@ -2294,6 +2303,15 @@ body.is-loading .loading-skeleton {
   border-radius: 10px;
   padding: 0.46rem;
   background: rgba(255, 255, 255, 0.03);
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.football-scorer-row:hover {
+  border-color: rgba(33, 201, 107, 0.58);
+  background: rgba(33, 201, 107, 0.1);
 }
 
 .football-scorer-row img {
@@ -2319,6 +2337,70 @@ body.is-loading .loading-skeleton {
 }
 
 .football-chart-wrap {
+  height: 280px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.45rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cricket-card-glow {
+  border-color: rgba(39, 180, 255, 0.28);
+  background: linear-gradient(160deg, rgba(39, 180, 255, 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.cricket-match-list,
+.cricket-form-list {
+  display: grid;
+  gap: 0.44rem;
+}
+
+.cricket-match-row {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.52rem;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cricket-match-row.live {
+  border-color: rgba(39, 180, 255, 0.64);
+  background: rgba(39, 180, 255, 0.16);
+}
+
+.cricket-match-row strong {
+  display: block;
+  color: var(--text-0);
+}
+
+.cricket-match-row p {
+  margin: 0.14rem 0 0;
+  color: var(--text-1);
+}
+
+.cricket-form-row {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.44rem;
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto auto;
+  gap: 0.36rem;
+  align-items: center;
+}
+
+.cricket-form-row strong {
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cricket-form-row span {
+  color: var(--text-1);
+  font-size: 0.82rem;
+}
+
+.cricket-chart-wrap {
   height: 280px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
@@ -2744,6 +2826,10 @@ body[data-module="nba"] .live-hud {
     height: 240px;
   }
 
+  .cricket-chart-wrap {
+    height: 240px;
+  }
+
   .practice-item {
     flex-direction: column;
     align-items: flex-start;
@@ -2979,6 +3065,18 @@ body[data-module="nba"] .live-hud {
 
   .football-chart-wrap {
     height: 210px;
+  }
+
+  .cricket-chart-wrap {
+    height: 210px;
+  }
+
+  .cricket-form-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  }
+
+  .cricket-form-row span:last-child {
+    display: none;
   }
 
   .driver-copy strong {
