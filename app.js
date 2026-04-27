@@ -73,6 +73,9 @@ const state = {
     recentEvents: [],
     competitionFilter: "all",
     genderFilter: "all",
+    statusFilter: "all",
+    formatFilter: "all",
+    sortMode: "timeAsc",
     momentumChart: null,
     lastUpdated: ""
   }
@@ -942,6 +945,144 @@ function parseCricketRuns(value) {
   return fromText ? Number(fromText[0]) : 0;
 }
 
+function cricketEventTimestamp(event) {
+  const date = String(event?.dateEvent || "").trim();
+  if (!date) {
+    return 0;
+  }
+  const time = String(event?.strTime || "00:00:00").trim() || "00:00:00";
+  const stamp = new Date(`${date}T${time.endsWith("Z") ? time : `${time}Z`}`).getTime();
+  if (Number.isFinite(stamp) && stamp > 0) {
+    return stamp;
+  }
+  const fallback = new Date(date).getTime();
+  return Number.isFinite(fallback) ? fallback : 0;
+}
+
+function cricketFormatTag(event) {
+  const text = `${event?.strLeague || ""} ${event?.strEvent || ""} ${event?.strSeason || ""}`.toLowerCase();
+  if (text.includes("t10")) {
+    return "T10";
+  }
+  if (text.includes("t20")) {
+    return "T20";
+  }
+  if (text.includes("odi") || text.includes("one day")) {
+    return "ODI";
+  }
+  if (text.includes("test")) {
+    return "TEST";
+  }
+  if (text.includes("hundred")) {
+    return "THE HUNDRED";
+  }
+  return "OTHER";
+}
+
+function cricketStatusBucket(event, nowTs = Date.now()) {
+  if (isCricketLiveStatus(event?.strStatus)) {
+    return "live";
+  }
+
+  const statusText = String(event?.strStatus || "").toLowerCase();
+  const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+  const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+  const hasScore = homeRuns > 0 || awayRuns > 0;
+  const stamp = cricketEventTimestamp(event);
+  const completedByStatus = ["completed", "finished", "result", "won by", "match over"].some((term) => statusText.includes(term));
+
+  if (completedByStatus || (hasScore && stamp <= nowTs)) {
+    return "completed";
+  }
+  return "upcoming";
+}
+
+function cricketMargin(event) {
+  const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+  const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+  return Math.abs(homeRuns - awayRuns);
+}
+
+function sortCricketEvents(events, sortMode = "timeAsc") {
+  const pool = [...(events || [])];
+  switch (sortMode) {
+    case "timeDesc":
+      return pool.sort((a, b) => cricketEventTimestamp(b) - cricketEventTimestamp(a));
+    case "runsHigh":
+      return pool.sort((a, b) => {
+        const totalB = parseCricketRuns(b?.intHomeScore || b?.strHomeScore) + parseCricketRuns(b?.intAwayScore || b?.strAwayScore);
+        const totalA = parseCricketRuns(a?.intHomeScore || a?.strHomeScore) + parseCricketRuns(a?.intAwayScore || a?.strAwayScore);
+        return totalB - totalA;
+      });
+    case "close":
+      return pool.sort((a, b) => cricketMargin(a) - cricketMargin(b));
+    default:
+      return pool.sort((a, b) => cricketEventTimestamp(a) - cricketEventTimestamp(b));
+  }
+}
+
+function buildCricketSeriesBoard(events) {
+  const board = new Map();
+  (events || []).forEach((event) => {
+    const league = String(event?.strLeague || "Global Series").trim() || "Global Series";
+    const season = String(event?.strSeason || "Current").trim() || "Current";
+    const key = `${league}__${season}`;
+    if (!board.has(key)) {
+      board.set(key, {
+        league,
+        season,
+        live: 0,
+        upcoming: 0,
+        completed: 0,
+        total: 0
+      });
+    }
+
+    const row = board.get(key);
+    row.total += 1;
+    const bucket = cricketStatusBucket(event);
+    row[bucket] += 1;
+  });
+
+  return Array.from(board.values())
+    .sort((a, b) => b.live - a.live || b.upcoming - a.upcoming || b.total - a.total)
+    .slice(0, 8);
+}
+
+function renderCricketMatchTile(event, tone = "default") {
+  const homeTeam = event?.strHomeTeam || "Home";
+  const awayTeam = event?.strAwayTeam || "Away";
+  const league = event?.strLeague || "League";
+  const status = event?.strStatus || (tone === "live" ? "Live" : tone === "completed" ? "Completed" : "Scheduled");
+  const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+  const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+  const totalRuns = homeRuns + awayRuns;
+  const format = cricketFormatTag(event);
+  const startLabel = footballKickoffLabel(new Date(cricketEventTimestamp(event) || Date.now()).toISOString());
+  const rowToneClass = tone === "live" ? "live" : tone === "completed" ? "completed" : "upcoming";
+
+  return `
+    <button class="cricket-match-row ${rowToneClass}" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(homeTeam)}" data-cricket-away="${escapeHtml(awayTeam)}" data-cricket-league="${escapeHtml(league)}" data-cricket-status="${escapeHtml(status)}" data-cricket-kickoff="${escapeHtml(new Date(cricketEventTimestamp(event) || Date.now()).toISOString())}" data-cricket-home-score="${escapeHtml(String(homeRuns))}" data-cricket-away-score="${escapeHtml(String(awayRuns))}" aria-label="Open cricket insight for ${escapeHtml(event?.strEvent || `${homeTeam} versus ${awayTeam}`)}">
+      <div class="cricket-match-topline">
+        <span class="cricket-league-pill">${escapeHtml(league)}</span>
+        <span class="cricket-format-pill">${escapeHtml(format)}</span>
+        <span class="cricket-status-pill ${rowToneClass}">${escapeHtml(status)}</span>
+      </div>
+      <div class="cricket-match-mainline">
+        <strong>${escapeHtml(homeTeam)}</strong>
+        <span class="cricket-score">${escapeHtml(String(homeRuns))}</span>
+        <span class="cricket-vs">vs</span>
+        <span class="cricket-score">${escapeHtml(String(awayRuns))}</span>
+        <strong>${escapeHtml(awayTeam)}</strong>
+      </div>
+      <div class="cricket-match-meta">
+        <p>${escapeHtml(startLabel)}</p>
+        <p>Total Runs ${escapeHtml(String(totalRuns))} • Margin ${escapeHtml(String(Math.abs(homeRuns - awayRuns)))}</p>
+      </div>
+    </button>
+  `;
+}
+
 function destroyCricketChart() {
   if (state.cricket.momentumChart) {
     state.cricket.momentumChart.destroy();
@@ -992,12 +1133,13 @@ function renderCricketMomentumChart(events) {
   }
   destroyCricketChart();
 
-  const sample = (events || []).slice(0, 6).reverse();
+  const sample = (events || []).slice(0, 8).reverse();
   const labels = sample.map((event) => `${(event?.strHomeTeam || "Home").slice(0, 3)}-${(event?.strAwayTeam || "Away").slice(0, 3)}`);
   const runTotals = sample.map((event) => parseCricketRuns(event?.intHomeScore || event?.strHomeScore) + parseCricketRuns(event?.intAwayScore || event?.strAwayScore));
+  const margins = sample.map((event) => cricketMargin(event));
 
   state.cricket.momentumChart = new Chart(canvas, {
-    type: "line",
+    type: "bar",
     data: {
       labels,
       datasets: [
@@ -1010,6 +1152,18 @@ function renderCricketMomentumChart(events) {
           fill: true,
           pointRadius: 2,
           borderWidth: 2
+        },
+        {
+          label: "Winning Margin",
+          data: margins,
+          type: "line",
+          borderColor: "rgba(255, 193, 88, 0.96)",
+          backgroundColor: "rgba(255, 193, 88, 0.22)",
+          tension: 0.3,
+          pointRadius: 2,
+          fill: false,
+          borderWidth: 2,
+          yAxisID: "y1"
         }
       ]
     },
@@ -1020,7 +1174,18 @@ function renderCricketMomentumChart(events) {
       },
       scales: {
         x: { ticks: { color: "#c7d0e2" }, grid: { color: "rgba(255,255,255,0.08)" } },
-        y: { ticks: { color: "#c7d0e2" }, grid: { color: "rgba(255,255,255,0.08)" } }
+        y: {
+          ticks: { color: "#c7d0e2" },
+          grid: { color: "rgba(255,255,255,0.08)" },
+          title: { display: true, text: "Runs", color: "#c7d0e2" }
+        },
+        y1: {
+          position: "right",
+          ticks: { color: "#ffe6a6" },
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: "Margin", color: "#ffe6a6" },
+          beginAtZero: true
+        }
       }
     }
   });
@@ -1046,7 +1211,7 @@ function setupCricketInsightEvents(formBoard = []) {
           <p><span>Match</span><strong>${escapeHtml(homeTeam)} vs ${escapeHtml(awayTeam)}</strong></p>
           <p><span>League</span><strong>${escapeHtml(league)}</strong></p>
           <p><span>Status</span><strong>${escapeHtml(status)}</strong></p>
-          <p><span>Scheduled</span><strong>${escapeHtml(footballKickoffLabel(kickoff ? `${kickoff}T00:00:00Z` : ""))}</strong></p>
+          <p><span>Scheduled</span><strong>${escapeHtml(footballKickoffLabel(kickoff || ""))}</strong></p>
           <p><span>Scoreline</span><strong>${escapeHtml(String(homeRuns))} - ${escapeHtml(String(awayRuns))}</strong></p>
           <p><span>Home Form</span><strong>${homeForm ? `${homeForm.wins}W / ${homeForm.losses}L` : "N/A"}</strong></p>
           <p><span>Away Form</span><strong>${awayForm ? `${awayForm.wins}W / ${awayForm.losses}L` : "N/A"}</strong></p>
@@ -4384,37 +4549,71 @@ async function renderCricket() {
   });
 
   try {
+    const warnings = [];
+    if (!state.cricket.statusFilter) {
+      state.cricket.statusFilter = "all";
+    }
+    if (!state.cricket.formatFilter) {
+      state.cricket.formatFilter = "all";
+    }
+    if (!state.cricket.sortMode) {
+      state.cricket.sortMode = "timeAsc";
+    }
+
     const dateOffsets = [-2, -1, 0, 1, 2, 3, 4];
-    const responses = await Promise.all(
+    const responses = await Promise.allSettled(
       dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Cricket" }))
     );
 
-    const events = responses
+    const fulfilled = responses
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => result.value);
+    if (!fulfilled.length) {
+      throw new Error("Cricket day feeds unavailable");
+    }
+    if (fulfilled.length < responses.length) {
+      warnings.push("Some daily feeds were unavailable");
+    }
+
+    const events = fulfilled
       .flatMap((response) => response?.events || [])
       .filter((event) => String(event?.strSport || "").toLowerCase() === "cricket");
     const deduped = Array.from(new Map(events.map((event) => [event.idEvent, event])).values());
     const now = Date.now();
 
-    const sorted = deduped.sort((a, b) => new Date(a?.dateEvent || 0).getTime() - new Date(b?.dateEvent || 0).getTime());
-    const filtered = applyCricketFilters(sorted, state.cricket.competitionFilter, state.cricket.genderFilter);
-    const liveEvents = filtered.filter((event) => isCricketLiveStatus(event?.strStatus));
-    const upcomingEvents = filtered.filter((event) => {
-      const stamp = new Date(event?.dateEvent || 0).getTime();
-      const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
-      return stamp >= now && !hasScore && !isCricketLiveStatus(event?.strStatus);
-    });
-    const recentEvents = [...filtered]
-      .filter((event) => {
-        const stamp = new Date(event?.dateEvent || 0).getTime();
-        const hasScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) > 0 || parseCricketRuns(event?.intAwayScore || event?.strAwayScore) > 0;
-        return stamp <= now && hasScore;
-      })
-      .reverse();
+    const sortedByTime = deduped.sort((a, b) => cricketEventTimestamp(a) - cricketEventTimestamp(b));
+    const baseFiltered = applyCricketFilters(sortedByTime, state.cricket.competitionFilter, state.cricket.genderFilter);
+    const enriched = baseFiltered.map((event) => ({
+      ...event,
+      _statusBucket: cricketStatusBucket(event, now),
+      _formatTag: cricketFormatTag(event),
+      _timestamp: cricketEventTimestamp(event)
+    }));
 
-    const formBoard = buildCricketFormTable(recentEvents.slice(0, 36));
+    const fullyFiltered = enriched.filter((event) => {
+      if (state.cricket.statusFilter !== "all" && event._statusBucket !== state.cricket.statusFilter) {
+        return false;
+      }
+      if (state.cricket.formatFilter !== "all" && event._formatTag.toLowerCase() !== state.cricket.formatFilter) {
+        return false;
+      }
+      return true;
+    });
+
+    const sorted = sortCricketEvents(fullyFiltered, state.cricket.sortMode);
+    const liveEvents = sorted.filter((event) => event._statusBucket === "live");
+    const upcomingEvents = sorted.filter((event) => event._statusBucket === "upcoming");
+    const recentEvents = sorted.filter((event) => event._statusBucket === "completed");
+    const recentForForm = [...enriched]
+      .filter((event) => event._statusBucket === "completed")
+      .sort((a, b) => b._timestamp - a._timestamp)
+      .slice(0, 36);
+
+    const formBoard = buildCricketFormTable(recentForForm);
+    const seriesBoard = buildCricketSeriesBoard(baseFiltered);
     const leadLive = liveEvents[0] || upcomingEvents[0] || recentEvents[0] || null;
-    const topRunMatch = recentEvents[0]
-      ? recentEvents.reduce((best, event) => {
+    const topRunMatch = recentForForm[0]
+      ? recentForForm.reduce((best, event) => {
         const total = parseCricketRuns(event?.intHomeScore || event?.strHomeScore) + parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
         return total > best.total ? { total, event } : best;
       }, { total: 0, event: null })
@@ -4444,8 +4643,8 @@ async function renderCricket() {
 
     const cards = [
       { title: "Live Match Centers", value: String(liveEvents.length), subtitle: "Active live scorecards" },
-      { title: "Upcoming Fixtures", value: String(upcomingEvents.length), subtitle: "Next 4 days window" },
-      { title: "Completed Matches", value: String(recentEvents.length), subtitle: "Recent scored fixtures" },
+      { title: "Upcoming Fixtures", value: String(upcomingEvents.length), subtitle: "Scheduled in watch window" },
+      { title: "Completed Matches", value: String(recentEvents.length), subtitle: "Results in current filter" },
       {
         title: "Top Aggregate",
         value: topRunMatch.event ? `${topRunMatch.total} runs` : "Pending",
@@ -4479,39 +4678,47 @@ async function renderCricket() {
               <option value="women" ${state.cricket.genderFilter === "women" ? "selected" : ""}>Women</option>
             </select>
           </label>
-          <p class="inline-meta">Cricket data source is open-source endpoint feed (TheSportsDB).</p>
+          <label>
+            Format
+            <select id="cricketFormatFilter" class="select-input">
+              <option value="all" ${state.cricket.formatFilter === "all" ? "selected" : ""}>All Formats</option>
+              <option value="t20" ${state.cricket.formatFilter === "t20" ? "selected" : ""}>T20</option>
+              <option value="odi" ${state.cricket.formatFilter === "odi" ? "selected" : ""}>ODI</option>
+              <option value="test" ${state.cricket.formatFilter === "test" ? "selected" : ""}>Test</option>
+              <option value="other" ${state.cricket.formatFilter === "other" ? "selected" : ""}>Other</option>
+            </select>
+          </label>
+          <label>
+            Sort
+            <select id="cricketSortMode" class="select-input">
+              <option value="timeAsc" ${state.cricket.sortMode === "timeAsc" ? "selected" : ""}>Start Time (Earliest)</option>
+              <option value="timeDesc" ${state.cricket.sortMode === "timeDesc" ? "selected" : ""}>Start Time (Latest)</option>
+              <option value="runsHigh" ${state.cricket.sortMode === "runsHigh" ? "selected" : ""}>Highest Runs</option>
+              <option value="close" ${state.cricket.sortMode === "close" ? "selected" : ""}>Closest Margin</option>
+            </select>
+          </label>
         </div>
+        <div class="cricket-status-strip">
+          ${[
+            { key: "all", label: "All", count: enriched.length },
+            { key: "live", label: "Live", count: enriched.filter((event) => event._statusBucket === "live").length },
+            { key: "upcoming", label: "Upcoming", count: enriched.filter((event) => event._statusBucket === "upcoming").length },
+            { key: "completed", label: "Completed", count: enriched.filter((event) => event._statusBucket === "completed").length }
+          ].map((item) => `
+            <button type="button" class="cricket-status-chip ${state.cricket.statusFilter === item.key ? "active" : ""}" data-cricket-status-chip="${item.key}">
+              <span>${item.label}</span>
+              <strong>${item.count}</strong>
+            </button>
+          `).join("")}
+        </div>
+        <p class="inline-meta">Cricket data source: TheSportsDB open feed. Premium match center overlays tactical grouping and dynamic sorting.</p>
       </article>
       `
     );
 
-    const liveRows = liveEvents.slice(0, 6).map((event) => `
-      <button class="cricket-match-row live" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(event.strHomeScore || event.intHomeScore || "0"))}" data-cricket-away-score="${escapeHtml(String(event.strAwayScore || event.intAwayScore || "0"))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
-        <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
-        <p>${escapeHtml(event.strLeague || "League")} • ${escapeHtml(event.strStatus || "Live")}</p>
-        <p class="inline-meta">${escapeHtml(String(event.strHomeScore || event.intHomeScore || "-"))} / ${escapeHtml(String(event.strAwayScore || event.intAwayScore || "-"))}</p>
-      </button>
-    `).join("");
-
-    const upcomingRows = upcomingEvents.slice(0, 8).map((event) => `
-      <button class="cricket-match-row" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "Scheduled")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(event.strHomeScore || event.intHomeScore || "0"))}" data-cricket-away-score="${escapeHtml(String(event.strAwayScore || event.intAwayScore || "0"))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
-        <strong>${escapeHtml(event.strHomeTeam || "Home")} vs ${escapeHtml(event.strAwayTeam || "Away")}</strong>
-        <p>${escapeHtml(event.strLeague || "League")}</p>
-        <p class="inline-meta">${escapeHtml(footballKickoffLabel(`${event.dateEvent}T${event.strTime || "00:00:00Z"}`))}</p>
-      </button>
-    `).join("");
-
-    const recentRows = recentEvents.slice(0, 8).map((event) => {
-      const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
-      const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
-      return `
-        <button class="cricket-match-row" type="button" data-cricket-match="1" data-cricket-home="${escapeHtml(event.strHomeTeam || "")}" data-cricket-away="${escapeHtml(event.strAwayTeam || "")}" data-cricket-league="${escapeHtml(event.strLeague || "")}" data-cricket-status="${escapeHtml(event.strStatus || "Completed")}" data-cricket-kickoff="${escapeHtml(event.dateEvent || "")}" data-cricket-home-score="${escapeHtml(String(homeRuns))}" data-cricket-away-score="${escapeHtml(String(awayRuns))}" aria-label="Open cricket insight for ${escapeHtml(event.strEvent || "match")}">
-          <strong>${escapeHtml(event.strHomeTeam || "Home")} ${homeRuns} - ${awayRuns} ${escapeHtml(event.strAwayTeam || "Away")}</strong>
-          <p>${escapeHtml(event.strLeague || "League")}</p>
-          <p class="inline-meta">${escapeHtml(event.strStatus || "Completed")}</p>
-        </button>
-      `;
-    }).join("");
+    const liveRows = liveEvents.slice(0, 6).map((event) => renderCricketMatchTile(event, "live")).join("");
+    const upcomingRows = upcomingEvents.slice(0, 8).map((event) => renderCricketMatchTile(event, "upcoming")).join("");
+    const recentRows = recentEvents.slice(0, 8).map((event) => renderCricketMatchTile(event, "completed")).join("");
 
     const formRows = formBoard.map((row, idx) => `
       <button class="cricket-form-row" type="button" data-cricket-team="${escapeHtml(row.team)}" aria-label="Open form insight for ${escapeHtml(row.team)}">
@@ -4520,7 +4727,22 @@ async function renderCricket() {
         <span>${row.played}P</span>
         <span>${row.wins}W</span>
         <span>${row.points}pts</span>
+        <span>${row.played ? (((row.runsFor - row.runsAgainst) / row.played).toFixed(1)) : "0.0"} NRR</span>
       </button>
+    `).join("");
+
+    const seriesRows = seriesBoard.map((row) => `
+      <article class="cricket-series-row">
+        <div>
+          <p class="kicker">${escapeHtml(row.season)}</p>
+          <strong>${escapeHtml(row.league)}</strong>
+        </div>
+        <div class="cricket-series-metrics">
+          <span><b>${row.live}</b> Live</span>
+          <span><b>${row.upcoming}</b> Upcoming</span>
+          <span><b>${row.completed}</b> Done</span>
+        </div>
+      </article>
     `).join("");
 
     grid.insertAdjacentHTML(
@@ -4547,17 +4769,25 @@ async function renderCricket() {
       </article>
 
       <article class="glass-card card-span-12 card-entry cricket-card-glow">
-        <h3 class="card-title">Run Momentum Trend</h3>
+        <h3 class="card-title">Series Tracker</h3>
+        <div class="cricket-series-list">${seriesRows || "<p class='empty-state'>Series tracker unavailable.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-12 card-entry cricket-card-glow">
+        <h3 class="card-title">Run Momentum + Match Margin Trend</h3>
         <div class="cricket-chart-wrap">
           <canvas id="cricketMomentumChart" aria-label="Cricket run momentum chart"></canvas>
         </div>
         <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.cricket.lastUpdated))}. Data source: TheSportsDB cricket day feeds.</p>
+        ${warnings.length ? `<p class="inline-meta">Limited mode: ${escapeHtml(warnings.join(" | "))}</p>` : ""}
       </article>
       `
     );
 
     const competitionSelect = qs("#cricketCompetitionFilter");
     const genderSelect = qs("#cricketGenderFilter");
+    const formatSelect = qs("#cricketFormatFilter");
+    const sortSelect = qs("#cricketSortMode");
     if (competitionSelect) {
       competitionSelect.onchange = () => {
         state.cricket.competitionFilter = competitionSelect.value || "all";
@@ -4572,8 +4802,29 @@ async function renderCricket() {
         renderCricket();
       };
     }
+    if (formatSelect) {
+      formatSelect.onchange = () => {
+        state.cricket.formatFilter = formatSelect.value || "all";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    }
+    if (sortSelect) {
+      sortSelect.onchange = () => {
+        state.cricket.sortMode = sortSelect.value || "timeAsc";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    }
+    qsa("[data-cricket-status-chip]").forEach((button) => {
+      button.onclick = () => {
+        state.cricket.statusFilter = button.getAttribute("data-cricket-status-chip") || "all";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    });
 
-    renderCricketMomentumChart(recentEvents);
+    renderCricketMomentumChart(recentForForm);
     setupCricketInsightEvents(formBoard);
   } catch (error) {
     console.error("renderCricket failed", error);
