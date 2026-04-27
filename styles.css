@@ -2186,6 +2186,8 @@ body.is-loading .loading-skeleton {
 
 .welcome-modal-card {
   max-width: 560px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
 }
 
 .welcome-sport-grid {
@@ -2195,15 +2197,37 @@ body.is-loading .loading-skeleton {
   margin-top: 0.52rem;
 }
 
-.welcome-sport-grid label {
-  border: 1px solid var(--line-soft);
-  border-radius: 10px;
-  padding: 0.54rem;
-  background: rgba(255, 255, 255, 0.03);
+.welcome-sport-grid.premium {
+  margin-top: 0.65rem;
+  gap: 0.55rem;
+}
+
+.welcome-sport-option {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 0.68rem;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-0);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+  text-align: left;
+  display: grid;
+  gap: 0.18rem;
+  cursor: pointer;
+}
+
+.welcome-sport-option strong {
+  font-size: 0.96rem;
+}
+
+.welcome-sport-option span {
+  color: var(--text-1);
+  font-size: 0.8rem;
+}
+
+.welcome-sport-option:hover,
+.welcome-sport-option.active {
+  border-color: rgba(var(--accent-rgb), 0.72);
+  background: linear-gradient(145deg, rgba(var(--accent-rgb), 0.26), rgba(255, 255, 255, 0.05));
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.3) inset;
 }
 
 .football-standings-head,

@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   timezone: "paddock:timezone",
   fxEnabled: "paddock:fxEnabled",
   f1CoreCache: "paddock:f1CoreCache",
+  preferredModule: "sports:preferredModule",
   preferredSports: "sports:preferredSports",
   welcomeSeen: "sports:welcomeSeen"
 };
@@ -2602,6 +2603,7 @@ function setupSettingsDrawer() {
   const drawer = qs("#settingsDrawer");
   const openBtn = qs("#openSettingsBtn");
   const closeBtn = qs("#closeSettingsBtn");
+  const preferredSportSelect = qs("#preferredSportSelect");
   if (!drawer || !openBtn || !closeBtn) {
     return;
   }
@@ -2623,6 +2625,21 @@ function setupSettingsDrawer() {
       closeDrawer();
     }
   };
+
+  if (preferredSportSelect) {
+    const preferred = localStorage.getItem(STORAGE_KEYS.preferredModule) || state.activeModule || "f1";
+    preferredSportSelect.value = preferred;
+    preferredSportSelect.onchange = () => {
+      const nextModule = preferredSportSelect.value || "f1";
+      localStorage.setItem(STORAGE_KEYS.preferredModule, nextModule);
+      localStorage.setItem(STORAGE_KEYS.preferredSports, JSON.stringify([nextModule]));
+      localStorage.setItem(STORAGE_KEYS.welcomeSeen, "yes");
+      state.activeModule = nextModule;
+      localStorage.setItem(STORAGE_KEYS.module, nextModule);
+      triggerMicroFeedback();
+      renderModule();
+    };
+  }
 }
 
 function setupWelcomeSportModal() {
@@ -2636,24 +2653,44 @@ function setupWelcomeSportModal() {
   modal.id = "welcomeSportModal";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
+  const defaultModule = localStorage.getItem(STORAGE_KEYS.preferredModule) || state.activeModule || "f1";
+  const options = [
+    { id: "f1", name: "Formula 1", note: "Race intelligence and strategy" },
+    { id: "football", name: "Football", note: "Leagues, fixtures, and scorers" },
+    { id: "cricket", name: "Cricket", note: "International and league tracking" },
+    { id: "nba", name: "NBA", note: "Court analytics and trends" }
+  ];
   modal.innerHTML = `
     <div class="map-modal-card glass-card welcome-modal-card">
       <div class="map-modal-head">
-        <h3 class="card-title" style="margin:0;">Choose Your Sports</h3>
+        <h3 class="card-title" style="margin:0;">Choose Your Main Sport</h3>
       </div>
-      <p class="inline-meta">Pick what you want first. You can always switch modules later.</p>
-      <div class="welcome-sport-grid">
-        <label><input type="checkbox" value="f1" checked /> Formula 1</label>
-        <label><input type="checkbox" value="football" checked /> Football</label>
-        <label><input type="checkbox" value="cricket" checked /> Cricket</label>
-        <label><input type="checkbox" value="nba" /> NBA</label>
+      <p class="inline-meta">We will open this sport first every time. You can change it anytime in Settings.</p>
+      <div class="welcome-sport-grid premium">
+        ${options.map((option) => `
+          <button class="welcome-sport-option ${defaultModule === option.id ? "active" : ""}" type="button" data-welcome-module="${option.id}">
+            <strong>${option.name}</strong>
+            <span>${option.note}</span>
+          </button>
+        `).join("")}
       </div>
       <div class="upcoming-race-actions quick-actions">
-        <button id="welcomeContinueBtn" class="small-btn" type="button">Start Dashboard</button>
+        <button id="welcomeContinueBtn" class="small-btn" type="button">Enter Dashboard</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+
+  let selectedModule = defaultModule;
+  qsa("#welcomeSportModal [data-welcome-module]").forEach((button) => {
+    button.onclick = () => {
+      selectedModule = button.getAttribute("data-welcome-module") || "f1";
+      qsa("#welcomeSportModal [data-welcome-module]").forEach((node) => {
+        node.classList.toggle("active", node === button);
+      });
+      triggerMicroFeedback();
+    };
+  });
 
   const continueBtn = qs("#welcomeContinueBtn");
   if (!continueBtn) {
@@ -2661,15 +2698,17 @@ function setupWelcomeSportModal() {
   }
 
   continueBtn.onclick = () => {
-    const picks = qsa("#welcomeSportModal input[type='checkbox']:checked").map((node) => node.value);
-    const selected = picks.length ? picks : ["f1"];
-    localStorage.setItem(STORAGE_KEYS.preferredSports, JSON.stringify(selected));
+    localStorage.setItem(STORAGE_KEYS.preferredModule, selectedModule);
+    localStorage.setItem(STORAGE_KEYS.preferredSports, JSON.stringify([selectedModule]));
     localStorage.setItem(STORAGE_KEYS.welcomeSeen, "yes");
 
-    const priority = ["football", "cricket", "f1", "nba"];
-    const target = priority.find((module) => selected.includes(module)) || "f1";
-    state.activeModule = target;
-    localStorage.setItem(STORAGE_KEYS.module, target);
+    state.activeModule = selectedModule;
+    localStorage.setItem(STORAGE_KEYS.module, selectedModule);
+
+    const preferredSportSelect = qs("#preferredSportSelect");
+    if (preferredSportSelect) {
+      preferredSportSelect.value = selectedModule;
+    }
 
     modal.remove();
     triggerMicroFeedback();
