@@ -2481,7 +2481,7 @@ body.is-loading .loading-skeleton {
 
 .cricket-filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 220px));
+  grid-template-columns: repeat(5, minmax(0, 220px));
   gap: 0.7rem;
   align-items: end;
 }
@@ -2702,6 +2702,32 @@ body.is-loading .loading-skeleton {
 
 .cricket-series-metrics b {
   color: var(--text-0);
+}
+
+.cricket-records-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.cricket-record-item {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.62rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(39, 180, 255, 0.08));
+}
+
+.cricket-record-item strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--text-0);
+  line-height: 1.25;
+}
+
+.cricket-record-item p {
+  margin: 0.18rem 0 0;
+  color: var(--text-1);
+  font-size: 0.8rem;
 }
 
 .knowledge-output {
@@ -3142,6 +3168,10 @@ body[data-module="nba"] .live-hud {
     grid-template-columns: 1fr 1fr;
   }
 
+  .cricket-records-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .cricket-series-list {
     grid-template-columns: 1fr;
   }
@@ -3398,6 +3428,10 @@ body[data-module="nba"] .live-hud {
   }
 
   .cricket-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cricket-records-grid {
     grid-template-columns: 1fr;
   }
 

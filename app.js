@@ -73,6 +73,7 @@ const state = {
     recentEvents: [],
     competitionFilter: "all",
     genderFilter: "all",
+    leagueFilter: "all",
     statusFilter: "all",
     formatFilter: "all",
     sortMode: "timeAsc",
@@ -1047,6 +1048,84 @@ function buildCricketSeriesBoard(events) {
   return Array.from(board.values())
     .sort((a, b) => b.live - a.live || b.upcoming - a.upcoming || b.total - a.total)
     .slice(0, 8);
+}
+
+function computeCricketRecords(events) {
+  const completed = (events || []).filter((event) => cricketStatusBucket(event) === "completed");
+  const pick = (candidate, current, scoreGetter) => {
+    if (!candidate) {
+      return current;
+    }
+    if (!current) {
+      return candidate;
+    }
+    return scoreGetter(candidate) > scoreGetter(current) ? candidate : current;
+  };
+
+  let highestAggregate = null;
+  let highestTeamScore = null;
+  let largestMargin = null;
+  let closestFinish = null;
+  let highestSuccessfulChase = null;
+  let lowestDefended = null;
+  let lowestDefeated = null;
+
+  completed.forEach((event) => {
+    const homeTeam = event?.strHomeTeam || "Home";
+    const awayTeam = event?.strAwayTeam || "Away";
+    const homeRuns = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+    const awayRuns = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+    if (homeRuns <= 0 && awayRuns <= 0) {
+      return;
+    }
+
+    const total = homeRuns + awayRuns;
+    const margin = Math.abs(homeRuns - awayRuns);
+    const winnerTeam = homeRuns >= awayRuns ? homeTeam : awayTeam;
+    const loserTeam = homeRuns >= awayRuns ? awayTeam : homeTeam;
+    const winnerRuns = Math.max(homeRuns, awayRuns);
+    const loserRuns = Math.min(homeRuns, awayRuns);
+    const statusText = String(event?.strStatus || "").toLowerCase();
+    const winType = statusText.includes("wicket") ? "chase" : statusText.includes("run") ? "defended" : "unknown";
+
+    highestAggregate = pick({ event, value: total }, highestAggregate, (row) => row.value);
+    highestTeamScore = pick({ event, team: homeRuns >= awayRuns ? homeTeam : awayTeam, value: winnerRuns }, highestTeamScore, (row) => row.value);
+    largestMargin = pick({ event, winnerTeam, loserTeam, value: margin }, largestMargin, (row) => row.value);
+
+    if (margin > 0) {
+      if (!closestFinish || margin < closestFinish.value) {
+        closestFinish = { event, winnerTeam, loserTeam, value: margin };
+      }
+    }
+
+    if (winType === "chase") {
+      highestSuccessfulChase = pick(
+        { event, winnerTeam, loserTeam, value: winnerRuns, target: loserRuns + 1 },
+        highestSuccessfulChase,
+        (row) => row.value
+      );
+    }
+    if (winType === "defended") {
+      if (!lowestDefended || winnerRuns < lowestDefended.value) {
+        lowestDefended = { event, winnerTeam, loserTeam, value: winnerRuns };
+      }
+    }
+
+    if (!lowestDefeated || loserRuns < lowestDefeated.value) {
+      lowestDefeated = { event, winnerTeam, loserTeam, value: loserRuns };
+    }
+  });
+
+  return {
+    sampleSize: completed.length,
+    highestAggregate,
+    highestTeamScore,
+    largestMargin,
+    closestFinish,
+    highestSuccessfulChase,
+    lowestDefended,
+    lowestDefeated
+  };
 }
 
 function renderCricketMatchTile(event, tone = "default") {
@@ -4550,6 +4629,7 @@ async function renderCricket() {
 
   try {
     const warnings = [];
+    warnings.push("Player-level batter/wicket stats are not available on this free cricket feed");
     if (!state.cricket.statusFilter) {
       state.cricket.statusFilter = "all";
     }
@@ -4558,6 +4638,9 @@ async function renderCricket() {
     }
     if (!state.cricket.sortMode) {
       state.cricket.sortMode = "timeAsc";
+    }
+    if (!state.cricket.leagueFilter) {
+      state.cricket.leagueFilter = "all";
     }
 
     const dateOffsets = [-2, -1, 0, 1, 2, 3, 4];
@@ -4583,7 +4666,23 @@ async function renderCricket() {
 
     const sortedByTime = deduped.sort((a, b) => cricketEventTimestamp(a) - cricketEventTimestamp(b));
     const baseFiltered = applyCricketFilters(sortedByTime, state.cricket.competitionFilter, state.cricket.genderFilter);
-    const enriched = baseFiltered.map((event) => ({
+    const leagueOptions = Array.from(
+      new Set(
+        baseFiltered
+          .map((event) => String(event?.strLeague || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (state.cricket.leagueFilter !== "all" && !leagueOptions.includes(state.cricket.leagueFilter)) {
+      state.cricket.leagueFilter = "all";
+    }
+
+    const leagueScoped = state.cricket.leagueFilter === "all"
+      ? baseFiltered
+      : baseFiltered.filter((event) => String(event?.strLeague || "").trim() === state.cricket.leagueFilter);
+
+    const enriched = leagueScoped.map((event) => ({
       ...event,
       _statusBucket: cricketStatusBucket(event, now),
       _formatTag: cricketFormatTag(event),
@@ -4608,9 +4707,14 @@ async function renderCricket() {
       .filter((event) => event._statusBucket === "completed")
       .sort((a, b) => b._timestamp - a._timestamp)
       .slice(0, 36);
+    const recordsPool = [...enriched]
+      .filter((event) => state.cricket.formatFilter === "all" || event._formatTag.toLowerCase() === state.cricket.formatFilter)
+      .filter((event) => event._statusBucket === "completed")
+      .sort((a, b) => b._timestamp - a._timestamp);
 
     const formBoard = buildCricketFormTable(recentForForm);
-    const seriesBoard = buildCricketSeriesBoard(baseFiltered);
+    const seriesBoard = buildCricketSeriesBoard(leagueScoped);
+    const records = computeCricketRecords(recordsPool);
     const leadLive = liveEvents[0] || upcomingEvents[0] || recentEvents[0] || null;
     const topRunMatch = recentForForm[0]
       ? recentForForm.reduce((best, event) => {
@@ -4676,6 +4780,13 @@ async function renderCricket() {
               <option value="all" ${state.cricket.genderFilter === "all" ? "selected" : ""}>All</option>
               <option value="men" ${state.cricket.genderFilter === "men" ? "selected" : ""}>Men</option>
               <option value="women" ${state.cricket.genderFilter === "women" ? "selected" : ""}>Women</option>
+            </select>
+          </label>
+          <label>
+            League / Domestic
+            <select id="cricketLeagueFilter" class="select-input">
+              <option value="all" ${state.cricket.leagueFilter === "all" ? "selected" : ""}>All competitions</option>
+              ${leagueOptions.map((league) => `<option value="${escapeHtml(league)}" ${state.cricket.leagueFilter === league ? "selected" : ""}>${escapeHtml(league)}</option>`).join("")}
             </select>
           </label>
           <label>
@@ -4774,6 +4885,53 @@ async function renderCricket() {
       </article>
 
       <article class="glass-card card-span-12 card-entry cricket-card-glow">
+        <h3 class="card-title">Deep Match Records</h3>
+        <div class="cricket-records-grid">
+          <article class="cricket-record-item">
+            <p class="kicker">Highest Match Aggregate</p>
+            <strong>${records.highestAggregate ? `${records.highestAggregate.value} runs` : "No data"}</strong>
+            <p>${records.highestAggregate?.event?.strEvent ? escapeHtml(records.highestAggregate.event.strEvent) : "Completed results required"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Highest Team Total</p>
+            <strong>${records.highestTeamScore ? `${records.highestTeamScore.team} • ${records.highestTeamScore.value}` : "No data"}</strong>
+            <p>${records.highestTeamScore?.event?.strLeague ? escapeHtml(records.highestTeamScore.event.strLeague) : "Completed results required"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Highest Successful Chase</p>
+            <strong>${records.highestSuccessfulChase ? `${records.highestSuccessfulChase.winnerTeam} chased ${records.highestSuccessfulChase.target}` : "Feed cannot confirm chase type"}</strong>
+            <p>${records.highestSuccessfulChase ? `${records.highestSuccessfulChase.value} runs` : "Needs run/wicket result strings"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Lowest Total Defended</p>
+            <strong>${records.lowestDefended ? `${records.lowestDefended.winnerTeam} defended ${records.lowestDefended.value}` : "Feed cannot confirm defended totals"}</strong>
+            <p>${records.lowestDefended?.event?.strEvent ? escapeHtml(records.lowestDefended.event.strEvent) : "Needs run-based result strings"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Lowest Total Defeated</p>
+            <strong>${records.lowestDefeated ? `${records.lowestDefeated.loserTeam} all out/short at ${records.lowestDefeated.value}` : "No data"}</strong>
+            <p>${records.lowestDefeated?.event?.strLeague ? escapeHtml(records.lowestDefeated.event.strLeague) : "Completed results required"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Closest Finish</p>
+            <strong>${records.closestFinish ? `${records.closestFinish.winnerTeam} by ${records.closestFinish.value}` : "No data"}</strong>
+            <p>${records.closestFinish?.event?.strEvent ? escapeHtml(records.closestFinish.event.strEvent) : "Completed results required"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Largest Win Margin</p>
+            <strong>${records.largestMargin ? `${records.largestMargin.winnerTeam} by ${records.largestMargin.value}` : "No data"}</strong>
+            <p>${records.largestMargin?.event?.strEvent ? escapeHtml(records.largestMargin.event.strEvent) : "Completed results required"}</p>
+          </article>
+          <article class="cricket-record-item">
+            <p class="kicker">Top Batter / Top Bowler</p>
+            <strong>Not available on this free endpoint</strong>
+            <p>Player stat feed is paywalled; this panel auto-upgrades once player stats API is connected.</p>
+          </article>
+        </div>
+        <p class="inline-meta">Record sample size: ${escapeHtml(String(records.sampleSize))} completed matches in current competition/league/gender/format scope.</p>
+      </article>
+
+      <article class="glass-card card-span-12 card-entry cricket-card-glow">
         <h3 class="card-title">Run Momentum + Match Margin Trend</h3>
         <div class="cricket-chart-wrap">
           <canvas id="cricketMomentumChart" aria-label="Cricket run momentum chart"></canvas>
@@ -4786,11 +4944,13 @@ async function renderCricket() {
 
     const competitionSelect = qs("#cricketCompetitionFilter");
     const genderSelect = qs("#cricketGenderFilter");
+    const leagueSelect = qs("#cricketLeagueFilter");
     const formatSelect = qs("#cricketFormatFilter");
     const sortSelect = qs("#cricketSortMode");
     if (competitionSelect) {
       competitionSelect.onchange = () => {
         state.cricket.competitionFilter = competitionSelect.value || "all";
+        state.cricket.leagueFilter = "all";
         triggerMicroFeedback();
         renderCricket();
       };
@@ -4798,6 +4958,13 @@ async function renderCricket() {
     if (genderSelect) {
       genderSelect.onchange = () => {
         state.cricket.genderFilter = genderSelect.value || "all";
+        triggerMicroFeedback();
+        renderCricket();
+      };
+    }
+    if (leagueSelect) {
+      leagueSelect.onchange = () => {
+        state.cricket.leagueFilter = leagueSelect.value || "all";
         triggerMicroFeedback();
         renderCricket();
       };
