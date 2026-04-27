@@ -2497,6 +2497,9 @@ body.is-loading .loading-skeleton {
 .cricket-form-list {
   display: grid;
   gap: 0.44rem;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 0.2rem;
 }
 
 .cricket-status-strip {
@@ -2706,7 +2709,7 @@ body.is-loading .loading-skeleton {
 
 .cricket-records-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
 }
 

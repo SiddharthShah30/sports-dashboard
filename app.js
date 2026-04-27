@@ -77,6 +77,8 @@ const state = {
     statusFilter: "all",
     formatFilter: "all",
     sortMode: "timeAsc",
+    autoRefreshTimer: null,
+    isLoading: false,
     momentumChart: null,
     lastUpdated: ""
   }
@@ -881,9 +883,39 @@ async function fetchSportsDbJSON(path, params = {}) {
 }
 
 function cricketDateOffset(days = 0) {
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  const zone = state.timezone === "TRACK_AUTO"
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : (state.timezone || "Asia/Kolkata");
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value || now.getUTCFullYear());
+  const month = Number(parts.find((part) => part.type === "month")?.value || (now.getUTCMonth() + 1));
+  const day = Number(parts.find((part) => part.type === "day")?.value || now.getUTCDate());
+  const shiftedUtc = new Date(Date.UTC(year, month - 1, day + days));
+  return shiftedUtc.toISOString().slice(0, 10);
+}
+
+function startCricketAutoRefresh() {
+  stopCricketAutoRefresh();
+  state.cricket.autoRefreshTimer = setInterval(() => {
+    if (state.activeModule !== "cricket" || document.hidden || state.cricket.isLoading) {
+      return;
+    }
+    renderCricket();
+  }, 60000);
+}
+
+function stopCricketAutoRefresh() {
+  if (state.cricket.autoRefreshTimer) {
+    clearInterval(state.cricket.autoRefreshTimer);
+    state.cricket.autoRefreshTimer = null;
+  }
 }
 
 function isCricketLiveStatus(statusText = "") {
@@ -4613,6 +4645,10 @@ async function renderFootball() {
 }
 
 async function renderCricket() {
+  if (state.cricket.isLoading) {
+    return;
+  }
+  state.cricket.isLoading = true;
   const grid = qs("#dashboardGrid");
   grid.classList.remove("f1-layout");
   grid.innerHTML = "";
@@ -4630,6 +4666,7 @@ async function renderCricket() {
   try {
     const warnings = [];
     warnings.push("Player-level batter/wicket stats are not available on this free cricket feed");
+    warnings.push("Live cards auto-refresh every 60 seconds");
     if (!state.cricket.statusFilter) {
       state.cricket.statusFilter = "all";
     }
@@ -4643,7 +4680,7 @@ async function renderCricket() {
       state.cricket.leagueFilter = "all";
     }
 
-    const dateOffsets = [-2, -1, 0, 1, 2, 3, 4];
+    const dateOffsets = [-1, 0, 1, 2, 3];
     const responses = await Promise.allSettled(
       dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Cricket" }))
     );
@@ -4728,6 +4765,7 @@ async function renderCricket() {
     state.cricket.upcomingEvents = upcomingEvents;
     state.cricket.recentEvents = recentEvents;
     state.cricket.lastUpdated = new Date().toISOString();
+    startCricketAutoRefresh();
 
     updateLiveHUD({
       raceName: leadLive ? `${leadLive.strLeague || "Cricket"} Center` : "Cricket Center",
@@ -5013,6 +5051,7 @@ async function renderCricket() {
       </article>
     `;
   } finally {
+    state.cricket.isLoading = false;
     setLoadingState(false);
   }
 }
@@ -5083,6 +5122,7 @@ function renderModule() {
   }
   if (state.activeModule !== "cricket") {
     destroyCricketChart();
+    stopCricketAutoRefresh();
   }
 
   switch (state.activeModule) {
