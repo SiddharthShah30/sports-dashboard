@@ -7,7 +7,7 @@
   <title>Sports Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -28,6 +28,9 @@
 <body>
   <div class="bg-lights" aria-hidden="true"></div>
   <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-orbit bg-orbit-a" aria-hidden="true"></div>
+  <div class="bg-orbit bg-orbit-b" aria-hidden="true"></div>
+  <div class="bg-noise" aria-hidden="true"></div>
 
   <header class="app-header slide-down">
     <div class="brand brand-lockup">
@@ -63,6 +66,17 @@
       </div>
     </div>
   </header>
+
+  <section class="hub-ribbon fade-in" aria-label="Sports data pipeline summary">
+    <div class="hub-ribbon-track">
+      <span>SPORTS HUB ENGINE</span>
+      <span>F1: ERGAST/JOLPI + OPENF1</span>
+      <span>FOOTBALL: API-FOOTBALL</span>
+      <span>CRICKET: THESPORTSDB LIVE FEEDS</span>
+      <span>NBA: THESPORTSDB BASKETBALL FEEDS</span>
+      <span>REAL-TIME HUD + INSIGHT MODALS + CROSS-SPORT TRENDS</span>
+    </div>
+  </section>
 
   <main class="dashboard-shell fade-in">
     <section id="dashboardGrid" class="dashboard-grid" aria-live="polite"></section>

@@ -918,6 +918,54 @@ function stopCricketAutoRefresh() {
   }
 }
 
+function runModuleTransition() {
+  const shell = qs(".dashboard-shell");
+  if (!shell) {
+    return;
+  }
+  shell.classList.remove("module-transition-out");
+  void shell.offsetWidth;
+  shell.classList.add("module-transition-out");
+  setTimeout(() => shell.classList.remove("module-transition-out"), 420);
+}
+
+function isNbaLiveStatus(statusText = "") {
+  const text = String(statusText || "").toLowerCase();
+  return ["live", "in progress", "q1", "q2", "q3", "q4", "ot", "halftime"].some((term) => text.includes(term));
+}
+
+function renderNbaMatchTile(event, tone = "upcoming") {
+  const homeTeam = event?.strHomeTeam || "Home";
+  const awayTeam = event?.strAwayTeam || "Away";
+  const homeScore = parseCricketRuns(event?.intHomeScore || event?.strHomeScore);
+  const awayScore = parseCricketRuns(event?.intAwayScore || event?.strAwayScore);
+  const league = event?.strLeague || "Basketball";
+  const status = event?.strStatus || "Scheduled";
+  const start = cricketEventTimestamp(event);
+  const rowToneClass = tone === "live" ? "live" : tone === "completed" ? "completed" : "upcoming";
+
+  return `
+    <article class="cricket-match-row ${rowToneClass}">
+      <div class="cricket-match-topline">
+        <span class="cricket-league-pill">${escapeHtml(league)}</span>
+        <span class="cricket-format-pill">NBA</span>
+        <span class="cricket-status-pill ${rowToneClass}">${escapeHtml(status)}</span>
+      </div>
+      <div class="cricket-match-mainline">
+        <strong>${escapeHtml(homeTeam)}</strong>
+        <span class="cricket-score">${escapeHtml(String(homeScore))}</span>
+        <span class="cricket-vs">vs</span>
+        <span class="cricket-score">${escapeHtml(String(awayScore))}</span>
+        <strong>${escapeHtml(awayTeam)}</strong>
+      </div>
+      <div class="cricket-match-meta">
+        <p>${escapeHtml(footballKickoffLabel(new Date(start || Date.now()).toISOString()))}</p>
+        <p>${escapeHtml(event?.strVenue || "Arena TBD")}</p>
+      </div>
+    </article>
+  `;
+}
+
 function isCricketLiveStatus(statusText = "") {
   const text = String(statusText || "").toLowerCase();
   return ["live", "in progress", "stumps", "lunch", "tea", "innings break", "delay", "no result"].some((term) => text.includes(term));
@@ -5056,57 +5104,119 @@ async function renderCricket() {
   }
 }
 
-function renderNBA() {
+async function renderNBA() {
   const grid = qs("#dashboardGrid");
   grid.classList.remove("f1-layout");
   grid.innerHTML = "";
+  setLoadingState(true);
   updateLiveHUD({
-    raceName: "Formula 1 module inactive",
-    localTime: "--",
-    countdown: "Switch to F1",
-    weather: "--",
+    raceName: "Loading basketball command center",
+    localTime: "Syncing",
+    countdown: "Fetching games",
+    weather: "Syncing",
     seasonCompleted: 0,
     seasonTotal: 0
   });
 
-  const cards = [
-    { title: "PER Leader", value: "31.4", subtitle: "Season-adjusted" },
-    { title: "Conference Spread", value: "4.5 GB", subtitle: "Top 4 race" },
-    { title: "Shot Zone Edge", value: "+8.2%", subtitle: "Paint conversion" }
-  ];
+  try {
+    const dateOffsets = [-1, 0, 1, 2];
+    const responses = await Promise.allSettled(
+      dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Basketball" }))
+    );
 
-  const statWrap = document.createElement("section");
-  statWrap.className = "card-span-12 stats-row";
-  cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
-  grid.appendChild(statWrap);
+    const games = responses
+      .filter((result) => result.status === "fulfilled")
+      .flatMap((result) => result.value?.events || [])
+      .filter((event) => String(event?.strSport || "").toLowerCase() === "basketball");
 
-  grid.insertAdjacentHTML(
-    "beforeend",
-    `
-    <article class="glass-card card-span-8 card-entry">
-      <h3 class="card-title">Shot Chart Concept</h3>
-      <p class="empty-state">Use BallDontLie events to map shot efficiency by court region with the same reusable card component system.</p>
-      <div class="track-map">
-        <svg viewBox="0 0 280 160" role="img" aria-label="Basketball shot chart placeholder">
-          <rect x="30" y="20" width="220" height="120" fill="none" stroke="rgba(0,0,0,0.4)" stroke-width="2"></rect>
-          <path d="M140 20 L140 140" stroke="rgba(0,0,0,0.3)" stroke-width="2"></path>
-          <circle cx="80" cy="70" r="8" fill="#1459d9"></circle>
-          <circle cx="128" cy="95" r="8" fill="#1459d9"></circle>
-          <circle cx="190" cy="78" r="8" fill="#f1c40f"></circle>
-          <circle cx="220" cy="102" r="8" fill="#e63926"></circle>
-        </svg>
-      </div>
-    </article>
+    const deduped = Array.from(new Map(games.map((game) => [game.idEvent, game])).values());
+    const now = Date.now();
+    const liveGames = deduped.filter((game) => isNbaLiveStatus(game?.strStatus));
+    const upcomingGames = deduped
+      .filter((game) => cricketEventTimestamp(game) >= now && !isNbaLiveStatus(game?.strStatus))
+      .sort((a, b) => cricketEventTimestamp(a) - cricketEventTimestamp(b));
+    const recentGames = deduped
+      .filter((game) => cricketEventTimestamp(game) < now && !isNbaLiveStatus(game?.strStatus))
+      .sort((a, b) => cricketEventTimestamp(b) - cricketEventTimestamp(a));
 
-    <article class="glass-card card-span-4 card-entry">
-      <h3 class="card-title">Adapter Endpoint</h3>
-      <p class="empty-state">BallDontLie is open and clean for standings, players, and game logs.</p>
-      <pre class="code-callout">fetch("https://api.balldontlie.io/v1/players", {
-  headers: { Authorization: "YOUR_KEY" }
-});</pre>
-    </article>
-    `
-  );
+    const leadGame = liveGames[0] || upcomingGames[0] || recentGames[0] || null;
+    const cards = [
+      { title: "Live Games", value: String(liveGames.length), subtitle: "Currently in progress" },
+      { title: "Today + Next", value: String(upcomingGames.length), subtitle: "Upcoming tip-offs" },
+      { title: "Completed", value: String(recentGames.length), subtitle: "Recent finals" },
+      {
+        title: "Lead Matchup",
+        value: leadGame ? `${leadGame.strHomeTeam || "Home"} vs ${leadGame.strAwayTeam || "Away"}` : "No game available",
+        subtitle: leadGame?.strStatus || "Status pending"
+      }
+    ];
+
+    const statWrap = document.createElement("section");
+    statWrap.className = "card-span-12 stats-row football-stats-row";
+    cards.forEach((card) => statWrap.appendChild(createStatCard(card)));
+    grid.appendChild(statWrap);
+
+    const liveRows = liveGames.slice(0, 6).map((event) => renderNbaMatchTile(event, "live")).join("");
+    const upcomingRows = upcomingGames.slice(0, 8).map((event) => renderNbaMatchTile(event, "upcoming")).join("");
+    const recentRows = recentGames.slice(0, 8).map((event) => renderNbaMatchTile(event, "completed")).join("");
+
+    grid.insertAdjacentHTML(
+      "beforeend",
+      `
+      <article class="glass-card card-span-6 card-entry cricket-card-glow">
+        <h3 class="card-title">Live Scoreboard</h3>
+        <div class="cricket-match-list">${liveRows || "<p class='empty-state'>No live NBA games currently.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-6 card-entry cricket-card-glow">
+        <h3 class="card-title">Upcoming Games</h3>
+        <div class="cricket-match-list">${upcomingRows || "<p class='empty-state'>No upcoming games in feed window.</p>"}</div>
+      </article>
+
+      <article class="glass-card card-span-12 card-entry cricket-card-glow">
+        <h3 class="card-title">Recent Results</h3>
+        <div class="cricket-match-list">${recentRows || "<p class='empty-state'>Recent NBA results unavailable.</p>"}</div>
+        <p class="inline-meta">Open API source: TheSportsDB basketball feeds.</p>
+      </article>
+      `
+    );
+
+    updateLiveHUD({
+      raceName: leadGame ? `${leadGame.strLeague || "NBA"} Match Center` : "NBA Match Center",
+      country: leadGame?.strCountry || "United States",
+      localTime: footballKickoffLabel(new Date().toISOString()),
+      countdown: leadGame ? (leadGame?.dateEvent ? formatCountdown(new Date(cricketEventTimestamp(leadGame)).toISOString()) : "Tipoff TBD") : "Tipoff TBD",
+      weather: `${liveGames.length} live games`,
+      seasonCompleted: recentGames.length,
+      seasonTotal: Math.max(82, recentGames.length + upcomingGames.length),
+      tickerItems: [
+        liveGames.length ? `${liveGames.length} games live now` : "No live NBA games",
+        leadGame ? `${leadGame.strHomeTeam || "Home"} vs ${leadGame.strAwayTeam || "Away"}` : "Waiting for next game",
+        `Open feed synced from TheSportsDB`
+      ]
+    });
+  } catch (error) {
+    console.error("renderNBA failed", error);
+    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown basketball data error";
+    updateLiveHUD({
+      raceName: "Basketball feed issue",
+      localTime: "Unavailable",
+      countdown: "Unavailable",
+      weather: "Unavailable",
+      seasonCompleted: 0,
+      seasonTotal: 0,
+      tickerItems: ["Basketball services offline", "Check endpoint availability or CORS"]
+    });
+    grid.innerHTML = `
+      <article class="glass-card card-span-12 card-entry">
+        <h3 class="card-title">NBA Data Stream Interrupted</h3>
+        <p class="empty-state">Unable to load open basketball feeds right now. Retry shortly.</p>
+        <p class="inline-meta">Debug: ${reason}</p>
+      </article>
+    `;
+  } finally {
+    setLoadingState(false);
+  }
 }
 
 function renderModule() {
@@ -5144,7 +5254,11 @@ function renderModule() {
 function bindGlobalEvents() {
   qsa(".tab-btn").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.activeModule === button.dataset.module) {
+        return;
+      }
       triggerMicroFeedback();
+      runModuleTransition();
       state.activeModule = button.dataset.module;
       localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
       renderModule();
