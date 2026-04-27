@@ -488,31 +488,42 @@ async function fetchFootballJSON(path, params = {}) {
   });
 
   const url = `${FOOTBALL_API.baseUrl}${path}${search.toString() ? `?${search}` : ""}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 9000);
 
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "x-apisports-key": FOOTBALL_API.key
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "x-apisports-key": FOOTBALL_API.key
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Football API HTTP ${response.status}`);
       }
-    });
 
-    if (!response.ok) {
-      throw new Error(`Football API HTTP ${response.status}`);
+      const data = await response.json();
+      const errorEntries = Object.entries(data?.errors || {}).filter(([, value]) => String(value || "").trim());
+      if (errorEntries.length) {
+        const [firstKey, firstValue] = errorEntries[0];
+        throw new Error(`Football API error: ${firstKey} ${firstValue}`.trim());
+      }
+      return data;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) {
+        break;
+      }
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const data = await response.json();
-    const errorEntries = Object.entries(data?.errors || {}).filter(([, value]) => String(value || "").trim());
-    if (errorEntries.length) {
-      const [firstKey, firstValue] = errorEntries[0];
-      throw new Error(`Football API error: ${firstKey} ${firstValue}`.trim());
-    }
-    return data;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw new Error(`Football API network issue: ${lastError?.message || "Failed to fetch"}`);
 }
 
 function footballKickoffLabel(isoDate) {
@@ -3980,8 +3991,20 @@ async function renderFootball() {
   });
 
   try {
+    const footballWarnings = [];
+
     if (!state.football.leaguesCatalog.length) {
-      state.football.leaguesCatalog = await fetchFootballLeaguesCatalog();
+      try {
+        state.football.leaguesCatalog = await fetchFootballLeaguesCatalog();
+      } catch (error) {
+        footballWarnings.push("League catalog temporarily unavailable");
+        state.football.leaguesCatalog = FOOTBALL_LEAGUES.map((league) => ({
+          ...league,
+          logo: "",
+          type: "League",
+          seasons: [FOOTBALL_FREE_PLAN_SEASON_MAX, FOOTBALL_FREE_PLAN_SEASON_MAX - 1, FOOTBALL_FREE_PLAN_SEASON_MIN]
+        }));
+      }
     }
 
     const discoverable = state.football.leaguesCatalog.filter((league) => league.seasons.length);
@@ -4045,11 +4068,21 @@ async function renderFootball() {
     );
 
     const timezoneForApi = state.timezone === "TRACK_AUTO" ? "UTC" : (state.timezone || "Asia/Kolkata");
-    const standingsPack = await fetchFootballStandingsWithFallback(featuredLeague.id, featuredLeague.seasons?.[0] || state.football.season);
+    let standingsPack;
+    try {
+      standingsPack = await fetchFootballStandingsWithFallback(featuredLeague.id, featuredLeague.seasons?.[0] || state.football.season);
+    } catch (error) {
+      footballWarnings.push("Standings feed unavailable, using cached snapshot");
+      standingsPack = {
+        season: state.football.season || FOOTBALL_FREE_PLAN_SEASON_MAX,
+        data: null,
+        table: Array.isArray(state.football.standings) ? state.football.standings : []
+      };
+    }
     const resolvedSeason = standingsPack.season;
     const standingsTable = standingsPack.table;
 
-    const [fixturesData, scorersData, liveData, leaguePulseData] = await Promise.all([
+    const [fixturesResult, scorersResult, liveResult, pulseResult] = await Promise.allSettled([
       fetchFootballJSON("/fixtures", {
         league: featuredLeague.id,
         season: resolvedSeason,
@@ -4068,7 +4101,22 @@ async function renderFootball() {
       )
     ]);
 
-    const allSeasonFixtures = fixturesData?.response || [];
+    if (fixturesResult.status === "rejected") {
+      footballWarnings.push("Fixtures temporarily unavailable");
+    }
+    if (scorersResult.status === "rejected") {
+      footballWarnings.push("Top scorers temporarily unavailable");
+    }
+    if (liveResult.status === "rejected") {
+      footballWarnings.push("Live fixtures temporarily unavailable");
+    }
+
+    const fixturesData = fixturesResult.status === "fulfilled" ? fixturesResult.value : null;
+    const scorersData = scorersResult.status === "fulfilled" ? scorersResult.value : null;
+    const liveData = liveResult.status === "fulfilled" ? liveResult.value : null;
+    const leaguePulseData = pulseResult.status === "fulfilled" ? pulseResult.value : [];
+
+    const allSeasonFixtures = fixturesData?.response || state.football.upcomingFixtures || [];
     const nowTs = Date.now();
     let upcomingFixtures = allSeasonFixtures
       .filter((match) => new Date(match?.fixture?.date || 0).getTime() >= nowTs)
@@ -4077,8 +4125,8 @@ async function renderFootball() {
     if (!upcomingFixtures.length) {
       upcomingFixtures = [...allSeasonFixtures].slice(-8).reverse();
     }
-    const topScorers = (scorersData?.response || []).slice(0, 6);
-    const liveFixtures = liveData?.response || [];
+    const topScorers = (scorersData?.response || state.football.topScorers || []).slice(0, 6);
+    const liveFixtures = liveData?.response || state.football.liveFixtures || [];
     const leader = standingsTable[0] || null;
     const nextFixture = upcomingFixtures[0] || null;
     const topScorer = topScorers[0] || null;
@@ -4261,6 +4309,7 @@ async function renderFootball() {
           <canvas id="footballPointsChart" aria-label="Football points chart"></canvas>
         </div>
         <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.football.lastUpdated))}. Data source: API-Football.</p>
+        ${footballWarnings.length ? `<p class="inline-meta">Limited mode: ${escapeHtml(footballWarnings.join(" | "))}</p>` : ""}
       </article>
       `
     );
