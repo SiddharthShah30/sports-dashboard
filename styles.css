@@ -3804,3 +3804,199 @@ body[data-module="nba"] .live-hud {
       border-radius: 16px;
     }
   }
+
+  .module-hero-rail {
+    width: min(1380px, calc(100% - 4rem));
+    margin: 0.9rem auto 0;
+  }
+
+  .module-hero-card {
+    display: grid;
+    grid-template-columns: 1.2fr minmax(240px, 0.8fr);
+    gap: 1rem;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .module-hero-card h2 {
+    margin: 0.24rem 0;
+    font-family: "Rajdhani", sans-serif;
+    font-size: clamp(1.4rem, 3vw, 2.2rem);
+    letter-spacing: 0.04em;
+  }
+
+  .module-hero-card p {
+    margin: 0;
+    color: var(--text-1);
+    max-width: 58ch;
+  }
+
+  .module-hero-svg {
+    border: 1px solid var(--line-soft);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 0.35rem;
+  }
+
+  .module-hero-svg svg {
+    width: 100%;
+    height: 100%;
+    min-height: 92px;
+  }
+
+  .hero-path {
+    fill: none;
+    stroke: rgba(117, 223, 255, 0.95);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 360;
+    stroke-dashoffset: 360;
+    animation: heroPathDraw 2.5s ease-out forwards;
+  }
+
+  .hero-path-sub {
+    fill: none;
+    stroke: rgba(138, 255, 173, 0.68);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 360;
+    stroke-dashoffset: 360;
+    animation: heroPathDraw 3s ease-out forwards;
+  }
+
+  .hero-pitch {
+    fill: rgba(80, 176, 111, 0.09);
+    stroke: rgba(146, 255, 197, 0.6);
+  }
+
+  .hero-node {
+    fill: rgba(94, 215, 255, 0.75);
+    animation: nodePulse 1.8s ease-in-out infinite;
+  }
+
+  .hero-bar {
+    fill: rgba(140, 246, 166, 0.68);
+  }
+
+  .live-center-card {
+    width: min(1200px, 96vw);
+    max-height: 88vh;
+    overflow: auto;
+    border-color: rgba(138, 201, 255, 0.4);
+  }
+
+  .live-center-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgba(6, 10, 18, 0.78);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line-soft);
+    padding-bottom: 0.55rem;
+  }
+
+  .live-center-head .card-title {
+    margin: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .live-center-actions {
+    display: inline-flex;
+    gap: 0.45rem;
+  }
+
+  .live-center-pinned-strip {
+    position: sticky;
+    top: 58px;
+    z-index: 1;
+    margin-top: 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.58rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    background: rgba(39, 194, 255, 0.1);
+  }
+
+  .live-center-pinned-strip span {
+    border: 1px solid rgba(117, 223, 255, 0.5);
+    border-radius: 999px;
+    padding: 0.2rem 0.48rem;
+    font-size: 0.77rem;
+    color: #e8f4ff;
+    background: rgba(4, 14, 28, 0.6);
+  }
+
+  .live-center-body {
+    margin-top: 0.72rem;
+  }
+
+  .live-center-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .live-center-list {
+    display: grid;
+    gap: 0.42rem;
+    max-height: 56vh;
+    overflow: auto;
+    padding-right: 0.24rem;
+  }
+
+  .live-center-row {
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .live-center-row strong {
+    display: block;
+    color: var(--text-0);
+  }
+
+  .live-center-row p {
+    margin: 0.16rem 0 0;
+    color: var(--text-1);
+    font-size: 0.8rem;
+  }
+
+  @keyframes heroPathDraw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes nodePulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.16);
+      opacity: 0.78;
+    }
+  }
+
+  @media (max-width: 1024px) {
+    .module-hero-rail {
+      width: calc(100% - 2rem);
+    }
+
+    .module-hero-card {
+      grid-template-columns: 1fr;
+    }
+
+    .live-center-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .live-center-pinned-strip {
+      top: 54px;
+    }
+  }

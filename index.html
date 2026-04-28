@@ -59,6 +59,7 @@
           <option value="Asia/Tokyo">Tokyo (JST)</option>
         </select>
         <button id="openSettingsBtn" class="small-btn" type="button">Settings</button>
+        <button id="openLiveCenterBtn" class="small-btn" type="button">Live Center</button>
         <button class="profile-chip" type="button" aria-label="User profile">
           <span class="profile-dot">SS</span>
           <span>My Sports</span>
@@ -78,9 +79,28 @@
     </div>
   </section>
 
+  <section id="moduleHeroRail" class="module-hero-rail fade-in" aria-live="polite"></section>
+
   <main class="dashboard-shell fade-in">
     <section id="dashboardGrid" class="dashboard-grid" aria-live="polite"></section>
   </main>
+
+  <section id="liveMatchCenterModal" class="map-modal hidden" aria-label="Live Match Center" role="dialog" aria-modal="true">
+    <article class="map-modal-card glass-card live-center-card">
+      <div class="map-modal-head live-center-head">
+        <div>
+          <p class="kicker">Fullscreen Hub</p>
+          <h3 id="liveCenterTitle" class="card-title">Live Match Center</h3>
+        </div>
+        <div class="live-center-actions">
+          <button id="liveCenterRefreshBtn" class="small-btn" type="button">Refresh</button>
+          <button id="closeLiveCenterBtn" class="small-btn" type="button">Close</button>
+        </div>
+      </div>
+      <div id="liveCenterPinnedStrip" class="live-center-pinned-strip"></div>
+      <div id="liveCenterBody" class="live-center-body"></div>
+    </article>
+  </section>
 
   <aside id="settingsDrawer" class="settings-drawer hidden" aria-label="Sports settings">
     <div class="settings-panel glass-card">

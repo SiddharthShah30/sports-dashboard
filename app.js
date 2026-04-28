@@ -81,6 +81,15 @@ const state = {
     isLoading: false,
     momentumChart: null,
     lastUpdated: ""
+  },
+  nba: {
+    games: [],
+    liveGames: [],
+    upcomingGames: [],
+    recentGames: [],
+    autoRefreshTimer: null,
+    isLoading: false,
+    lastUpdated: ""
   }
 };
 
@@ -878,8 +887,23 @@ async function fetchSportsDbJSON(path, params = {}) {
       query.set(key, String(value));
     }
   });
+  query.set("_", String(Date.now()));
   const url = `${CRICKET_API.baseUrl}${path}${query.toString() ? `?${query}` : ""}`;
-  return fetchJSON(url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`SportsDB HTTP ${response.status}`);
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function cricketDateOffset(days = 0) {
@@ -908,13 +932,30 @@ function startCricketAutoRefresh() {
       return;
     }
     renderCricket();
-  }, 60000);
+  }, 30000);
 }
 
 function stopCricketAutoRefresh() {
   if (state.cricket.autoRefreshTimer) {
     clearInterval(state.cricket.autoRefreshTimer);
     state.cricket.autoRefreshTimer = null;
+  }
+}
+
+function startNbaAutoRefresh() {
+  stopNbaAutoRefresh();
+  state.nba.autoRefreshTimer = setInterval(() => {
+    if (state.activeModule !== "nba" || document.hidden || state.nba.isLoading) {
+      return;
+    }
+    renderNBA();
+  }, 45000);
+}
+
+function stopNbaAutoRefresh() {
+  if (state.nba.autoRefreshTimer) {
+    clearInterval(state.nba.autoRefreshTimer);
+    state.nba.autoRefreshTimer = null;
   }
 }
 
@@ -927,6 +968,217 @@ function runModuleTransition() {
   void shell.offsetWidth;
   shell.classList.add("module-transition-out");
   setTimeout(() => shell.classList.remove("module-transition-out"), 420);
+}
+
+function renderModuleHero() {
+  const host = qs("#moduleHeroRail");
+  if (!host) {
+    return;
+  }
+
+  const heroMap = {
+    f1: {
+      title: "Apex Telemetry Grid",
+      blurb: "Predictive race pace, live session timing, and championship risk surfaces in one frame.",
+      svg: `
+        <svg viewBox="0 0 380 96" role="img" aria-label="F1 telemetry">
+          <path class="hero-path" d="M10 78 L60 58 L92 65 L134 38 L176 44 L220 28 L264 34 L308 20 L370 28" />
+          <path class="hero-path-sub" d="M10 84 L58 74 L102 78 L148 60 L198 66 L238 54 L290 62 L340 48 L370 54" />
+        </svg>`
+    },
+    football: {
+      title: "Territory + Momentum",
+      blurb: "Live scoreboard pressure map across leagues with fixture pulse and goal-flow indicators.",
+      svg: `
+        <svg viewBox="0 0 380 96" role="img" aria-label="Football momentum map">
+          <rect x="8" y="12" width="364" height="72" rx="12" class="hero-pitch" />
+          <path class="hero-path" d="M20 64 C84 18, 142 86, 196 48 C252 10, 318 70, 360 32" />
+          <circle cx="192" cy="48" r="9" class="hero-node" />
+        </svg>`
+    },
+    cricket: {
+      title: "Session Pressure Engine",
+      blurb: "Live run-rate, chase difficulty, and innings swing compressed into rapid tactical cards.",
+      svg: `
+        <svg viewBox="0 0 380 96" role="img" aria-label="Cricket session graph">
+          <path class="hero-path" d="M12 70 L58 52 L92 56 L126 36 L164 44 L204 26 L246 44 L290 34 L332 40 L368 24" />
+          <rect x="24" y="20" width="20" height="56" rx="5" class="hero-bar" />
+          <rect x="338" y="18" width="20" height="60" rx="5" class="hero-bar" />
+        </svg>`
+    },
+    nba: {
+      title: "Possession Velocity",
+      blurb: "Live shot-volume rhythm, pace bands, and closing-time volatility across active games.",
+      svg: `
+        <svg viewBox="0 0 380 96" role="img" aria-label="Basketball pace chart">
+          <path class="hero-path" d="M10 66 C66 22, 118 82, 176 42 C236 0, 300 84, 370 20" />
+          <path class="hero-path-sub" d="M10 78 C70 38, 120 88, 176 56 C238 16, 304 90, 370 38" />
+        </svg>`
+    }
+  };
+
+  const hero = heroMap[state.activeModule] || heroMap.f1;
+  host.innerHTML = `
+    <article class="glass-card module-hero-card card-entry" data-hero-module="${escapeHtml(state.activeModule)}">
+      <div>
+        <p class="kicker">Sports Hub Narrative</p>
+        <h2>${escapeHtml(hero.title)}</h2>
+        <p>${escapeHtml(hero.blurb)}</p>
+      </div>
+      <div class="module-hero-svg">${hero.svg}</div>
+    </article>
+  `;
+}
+
+function liveCenterRowsForModule() {
+  if (state.activeModule === "football") {
+    return {
+      title: "Football Live Match Center",
+      pinned: state.football.liveFixtures.slice(0, 4).map((row) => `${row?.teams?.home?.name || "Home"} ${row?.goals?.home ?? "-"} : ${row?.goals?.away ?? "-"} ${row?.teams?.away?.name || "Away"}`),
+      live: state.football.liveFixtures.map((row) => ({
+        line: `${row?.teams?.home?.name || "Home"} ${row?.goals?.home ?? "-"} : ${row?.goals?.away ?? "-"} ${row?.teams?.away?.name || "Away"}`,
+        meta: `${row?.league?.name || "League"} • ${row?.fixture?.status?.short || "LIVE"}`
+      })),
+      upcoming: state.football.upcomingFixtures.slice(0, 10).map((row) => ({
+        line: `${row?.teams?.home?.name || "Home"} vs ${row?.teams?.away?.name || "Away"}`,
+        meta: footballKickoffLabel(row?.fixture?.date)
+      }))
+    };
+  }
+
+  if (state.activeModule === "cricket") {
+    const liveRows = state.cricket.liveEvents.map((row) => ({
+      line: `${row?.strHomeTeam || "Home"} ${parseCricketRuns(row?.intHomeScore || row?.strHomeScore)} : ${parseCricketRuns(row?.intAwayScore || row?.strAwayScore)} ${row?.strAwayTeam || "Away"}`,
+      meta: `${row?.strLeague || "League"} • ${row?.strStatus || "LIVE"}`
+    }));
+    const pinned = liveRows.slice(0, 4).map((row) => row.line);
+    return {
+      title: "Cricket Live Match Center",
+      pinned,
+      live: liveRows,
+      upcoming: state.cricket.upcomingEvents.slice(0, 10).map((row) => ({
+        line: `${row?.strHomeTeam || "Home"} vs ${row?.strAwayTeam || "Away"}`,
+        meta: footballKickoffLabel(new Date(cricketEventTimestamp(row) || Date.now()).toISOString())
+      }))
+    };
+  }
+
+  if (state.activeModule === "nba") {
+    return {
+      title: "NBA Live Match Center",
+      pinned: state.nba.liveGames.slice(0, 4).map((row) => `${row?.strHomeTeam || "Home"} ${parseCricketRuns(row?.intHomeScore || row?.strHomeScore)} : ${parseCricketRuns(row?.intAwayScore || row?.strAwayScore)} ${row?.strAwayTeam || "Away"}`),
+      live: state.nba.liveGames.map((row) => ({
+        line: `${row?.strHomeTeam || "Home"} ${parseCricketRuns(row?.intHomeScore || row?.strHomeScore)} : ${parseCricketRuns(row?.intAwayScore || row?.strAwayScore)} ${row?.strAwayTeam || "Away"}`,
+        meta: `${row?.strLeague || "NBA"} • ${row?.strStatus || "LIVE"}`
+      })),
+      upcoming: state.nba.upcomingGames.slice(0, 10).map((row) => ({
+        line: `${row?.strHomeTeam || "Home"} vs ${row?.strAwayTeam || "Away"}`,
+        meta: footballKickoffLabel(new Date(cricketEventTimestamp(row) || Date.now()).toISOString())
+      }))
+    };
+  }
+
+  return {
+    title: "Live Match Center",
+    pinned: [],
+    live: [],
+    upcoming: []
+  };
+}
+
+function renderLiveMatchCenter() {
+  const titleNode = qs("#liveCenterTitle");
+  const pinnedNode = qs("#liveCenterPinnedStrip");
+  const bodyNode = qs("#liveCenterBody");
+  if (!titleNode || !pinnedNode || !bodyNode) {
+    return;
+  }
+
+  const payload = liveCenterRowsForModule();
+  titleNode.textContent = payload.title;
+  pinnedNode.innerHTML = payload.pinned.length
+    ? payload.pinned.map((line) => `<span>${escapeHtml(line)}</span>`).join("")
+    : "<span>No live score currently available for this module.</span>";
+
+  const makeRows = (rows) => rows.length
+    ? rows.map((row) => `<article class="live-center-row"><strong>${escapeHtml(row.line)}</strong><p>${escapeHtml(row.meta)}</p></article>`).join("")
+    : "<p class='empty-state'>No rows available.</p>";
+
+  bodyNode.innerHTML = `
+    <section class="live-center-grid">
+      <article class="glass-card">
+        <h4 class="card-title">Live</h4>
+        <div class="live-center-list">${makeRows(payload.live)}</div>
+      </article>
+      <article class="glass-card">
+        <h4 class="card-title">Upcoming</h4>
+        <div class="live-center-list">${makeRows(payload.upcoming)}</div>
+      </article>
+    </section>
+  `;
+}
+
+function setupLiveMatchCenter() {
+  const modal = qs("#liveMatchCenterModal");
+  const openBtn = qs("#openLiveCenterBtn");
+  const closeBtn = qs("#closeLiveCenterBtn");
+  const refreshBtn = qs("#liveCenterRefreshBtn");
+  if (!modal || !openBtn || !closeBtn || !refreshBtn) {
+    return;
+  }
+
+  const close = () => modal.classList.add("hidden");
+
+  openBtn.onclick = () => {
+    triggerMicroFeedback();
+    renderLiveMatchCenter();
+    modal.classList.remove("hidden");
+  };
+
+  closeBtn.onclick = () => {
+    triggerMicroFeedback();
+    close();
+  };
+
+  modal.onclick = (event) => {
+    if (event.target === modal) {
+      close();
+    }
+  };
+
+  refreshBtn.onclick = () => {
+    triggerMicroFeedback();
+    if (state.activeModule === "football") {
+      renderFootball();
+    } else if (state.activeModule === "cricket") {
+      renderCricket();
+    } else if (state.activeModule === "nba") {
+      renderNBA();
+    }
+    setTimeout(() => renderLiveMatchCenter(), 700);
+  };
+}
+
+function switchModule(nextModule) {
+  if (!nextModule || nextModule === state.activeModule) {
+    return;
+  }
+
+  const applySwitch = () => {
+    runModuleTransition();
+    state.activeModule = nextModule;
+    localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
+    renderModule();
+  };
+
+  if (document.startViewTransition) {
+    document.startViewTransition(() => {
+      applySwitch();
+    });
+    return;
+  }
+
+  applySwitch();
 }
 
 function isNbaLiveStatus(statusText = "") {
@@ -4464,6 +4716,9 @@ async function renderFootball() {
     state.football.liveFixtures = liveFixtures;
     state.football.lastUpdated = new Date().toISOString();
     state.football.season = resolvedSeason;
+    if (!qs("#liveMatchCenterModal")?.classList.contains("hidden") && state.activeModule === "football") {
+      renderLiveMatchCenter();
+    }
 
     const tickerItems = [
       `${featuredLeague.name} (${featuredLeague.country}) season ${resolvedSeason}/${resolvedSeason + 1}`,
@@ -4728,7 +4983,7 @@ async function renderCricket() {
       state.cricket.leagueFilter = "all";
     }
 
-    const dateOffsets = [-1, 0, 1, 2, 3];
+    const dateOffsets = [-2, -1, 0, 1, 2, 3];
     const responses = await Promise.allSettled(
       dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Cricket" }))
     );
@@ -4814,6 +5069,9 @@ async function renderCricket() {
     state.cricket.recentEvents = recentEvents;
     state.cricket.lastUpdated = new Date().toISOString();
     startCricketAutoRefresh();
+    if (!qs("#liveMatchCenterModal")?.classList.contains("hidden") && state.activeModule === "cricket") {
+      renderLiveMatchCenter();
+    }
 
     updateLiveHUD({
       raceName: leadLive ? `${leadLive.strLeague || "Cricket"} Center` : "Cricket Center",
@@ -5105,6 +5363,10 @@ async function renderCricket() {
 }
 
 async function renderNBA() {
+  if (state.nba.isLoading) {
+    return;
+  }
+  state.nba.isLoading = true;
   const grid = qs("#dashboardGrid");
   grid.classList.remove("f1-layout");
   grid.innerHTML = "";
@@ -5119,7 +5381,7 @@ async function renderNBA() {
   });
 
   try {
-    const dateOffsets = [-1, 0, 1, 2];
+    const dateOffsets = [-2, -1, 0, 1, 2];
     const responses = await Promise.allSettled(
       dateOffsets.map((offset) => fetchSportsDbJSON("/eventsday.php", { d: cricketDateOffset(offset), s: "Basketball" }))
     );
@@ -5138,6 +5400,13 @@ async function renderNBA() {
     const recentGames = deduped
       .filter((game) => cricketEventTimestamp(game) < now && !isNbaLiveStatus(game?.strStatus))
       .sort((a, b) => cricketEventTimestamp(b) - cricketEventTimestamp(a));
+
+    state.nba.games = deduped;
+    state.nba.liveGames = liveGames;
+    state.nba.upcomingGames = upcomingGames;
+    state.nba.recentGames = recentGames;
+    state.nba.lastUpdated = new Date().toISOString();
+    startNbaAutoRefresh();
 
     const leadGame = liveGames[0] || upcomingGames[0] || recentGames[0] || null;
     const cards = [
@@ -5195,6 +5464,9 @@ async function renderNBA() {
         `Open feed synced from TheSportsDB`
       ]
     });
+    if (!qs("#liveMatchCenterModal")?.classList.contains("hidden") && state.activeModule === "nba") {
+      renderLiveMatchCenter();
+    }
   } catch (error) {
     console.error("renderNBA failed", error);
     const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown basketball data error";
@@ -5215,6 +5487,7 @@ async function renderNBA() {
       </article>
     `;
   } finally {
+    state.nba.isLoading = false;
     setLoadingState(false);
   }
 }
@@ -5222,7 +5495,11 @@ async function renderNBA() {
 function renderModule() {
   setActiveTab();
   setHeaderMeta();
+  renderModuleHero();
   setupTimezoneAndFxControls();
+  if (!qs("#liveMatchCenterModal")?.classList.contains("hidden")) {
+    renderLiveMatchCenter();
+  }
 
   if (state.activeModule !== "f1") {
     clearF1Intervals();
@@ -5233,6 +5510,9 @@ function renderModule() {
   if (state.activeModule !== "cricket") {
     destroyCricketChart();
     stopCricketAutoRefresh();
+  }
+  if (state.activeModule !== "nba") {
+    stopNbaAutoRefresh();
   }
 
   switch (state.activeModule) {
@@ -5254,19 +5534,14 @@ function renderModule() {
 function bindGlobalEvents() {
   qsa(".tab-btn").forEach((button) => {
     button.addEventListener("click", () => {
-      if (state.activeModule === button.dataset.module) {
-        return;
-      }
       triggerMicroFeedback();
-      runModuleTransition();
-      state.activeModule = button.dataset.module;
-      localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
-      renderModule();
+      switchModule(button.dataset.module);
     });
   });
 
   setupResetButton();
   setupSettingsDrawer();
+  setupLiveMatchCenter();
 }
 
 function init() {
