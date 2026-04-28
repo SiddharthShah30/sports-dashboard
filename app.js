@@ -959,6 +959,20 @@ function stopNbaAutoRefresh() {
   }
 }
 
+function renderStartupFallback(message = "Preparing live sports intelligence.") {
+  const grid = qs("#dashboardGrid");
+  if (!grid) {
+    return;
+  }
+
+  grid.innerHTML = `
+    <article class="glass-card card-span-12 card-entry">
+      <h3 class="card-title">Sports Hub</h3>
+      <p class="empty-state">${escapeHtml(message)}</p>
+    </article>
+  `;
+}
+
 function runModuleTransition() {
   const shell = qs(".dashboard-shell");
   if (!shell) {
@@ -5536,9 +5550,24 @@ function bindGlobalEvents() {
 }
 
 function init() {
-  bindGlobalEvents();
-  renderModule();
-  setupWelcomeSportModal();
+  try {
+    bindGlobalEvents();
+    renderModule();
+    setupWelcomeSportModal();
+  } catch (error) {
+    console.error("startup failed", error);
+    renderStartupFallback("The hub is loading. Please refresh in a moment.");
+  }
 }
 
 window.addEventListener("DOMContentLoaded", init);
+window.addEventListener("error", () => {
+  if (!qs("#dashboardGrid")?.children.length) {
+    renderStartupFallback("The hub is loading. Please refresh in a moment.");
+  }
+});
+window.addEventListener("unhandledrejection", () => {
+  if (!qs("#dashboardGrid")?.children.length) {
+    renderStartupFallback("The hub is loading. Please refresh in a moment.");
+  }
+});
