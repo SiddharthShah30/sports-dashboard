@@ -966,9 +966,40 @@ function renderStartupFallback(message = "Preparing live sports intelligence.") 
   }
 
   grid.innerHTML = `
+    <section class="card-span-12 stats-row football-stats-row">
+      <article class="glass-card stat-card card-entry">
+        <p class="stat-title">Live Coverage</p>
+        <p class="stat-value">Ready</p>
+        <p class="stat-subtitle">Dashboard shell is active</p>
+      </article>
+      <article class="glass-card stat-card card-entry">
+        <p class="stat-title">Selected Sport</p>
+        <p class="stat-value">${escapeHtml(state.activeModule.toUpperCase())}</p>
+        <p class="stat-subtitle">Your preferred view will load here</p>
+      </article>
+      <article class="glass-card stat-card card-entry">
+        <p class="stat-title">Live Center</p>
+        <p class="stat-value">Ready</p>
+        <p class="stat-subtitle">Fullscreen match view available</p>
+      </article>
+    </section>
+
     <article class="glass-card card-span-12 card-entry">
-      <h3 class="card-title">Sports Hub</h3>
-      <p class="empty-state">${escapeHtml(message)}</p>
+      <div class="card-title-actions">
+        <h3 class="card-title" style="margin:0;">Sports Hub</h3>
+        <span class="inline-meta">${escapeHtml(message)}</span>
+      </div>
+      <p class="empty-state">A premium sports dashboard is ready. Live match intelligence will populate as data loads.</p>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry">
+      <h3 class="card-title">Today</h3>
+      <p class="empty-state">Fixtures, standings, and live scoreboards appear here for the selected sport.</p>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry">
+      <h3 class="card-title">Highlights</h3>
+      <p class="empty-state">Top scorers, form windows, and match records will fill this surface instantly.</p>
     </article>
   `;
 }
