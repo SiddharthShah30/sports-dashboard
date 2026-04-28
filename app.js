@@ -1105,55 +1105,52 @@ function renderLiveMatchCenter() {
     : "<p class='empty-state'>No rows available.</p>";
 
   bodyNode.innerHTML = `
-    <section class="live-center-grid">
-      <article class="glass-card">
+      title: "Apex Racing Dashboard",
+      blurb: "Race pace, live sessions, and championship pressure rendered in a refined broadcast layout.",
         <h4 class="card-title">Live</h4>
-        <div class="live-center-list">${makeRows(payload.live)}</div>
-      </article>
+      title: "Territory + Momentum",
+      blurb: "Live scoreboard pressure, fixtures, and league movement presented with premium clarity.",
       <article class="glass-card">
-        <h4 class="card-title">Upcoming</h4>
-        <div class="live-center-list">${makeRows(payload.upcoming)}</div>
+      title: "Session Pressure Engine",
+      blurb: "Live run-rate, chases, and innings swing compressed into a clean tactical surface.",
       </article>
-    </section>
-  `;
+      title: "Possession Velocity",
+      blurb: "Shot rhythm, pace, and closing-time swings across active games in a clean live view.",
 }
 
-function setupLiveMatchCenter() {
+      title: "Football Live Match Center",
   const modal = qs("#liveMatchCenterModal");
   const openBtn = qs("#openLiveCenterBtn");
   const closeBtn = qs("#closeLiveCenterBtn");
   const refreshBtn = qs("#liveCenterRefreshBtn");
   if (!modal || !openBtn || !closeBtn || !refreshBtn) {
     return;
-  }
+      tickerItems: ["Football live view unavailable", "Retrying shortly"]
 
   const close = () => modal.classList.add("hidden");
 
-  openBtn.onclick = () => {
-    triggerMicroFeedback();
-    renderLiveMatchCenter();
+        <h3 class="card-title">Football Live View Unavailable</h3>
+        <p class="empty-state">Football data is unavailable right now. The dashboard will retry automatically when you return.</p>
     modal.classList.remove("hidden");
   };
 
   closeBtn.onclick = () => {
-    triggerMicroFeedback();
-    close();
+    warnings.push("Live cards auto-refresh every 30 seconds");
   };
-
-  modal.onclick = (event) => {
-    if (event.target === modal) {
-      close();
-    }
+      tickerItems: [
+        liveGames.length ? `${liveGames.length} games live now` : "No live NBA games",
+        leadGame ? `${leadGame.strHomeTeam || "Home"} vs ${leadGame.strAwayTeam || "Away"}` : "Waiting for next game",
+        `Live basketball board synced`
+      ]
   };
 
   refreshBtn.onclick = () => {
-    triggerMicroFeedback();
+      tickerItems: ["Basketball live view unavailable", "Retrying shortly"]
     if (state.activeModule === "football") {
       renderFootball();
     } else if (state.activeModule === "cricket") {
-      renderCricket();
-    } else if (state.activeModule === "nba") {
-      renderNBA();
+        <h3 class="card-title">Basketball Live View Unavailable</h3>
+        <p class="empty-state">Basketball data is unavailable right now. The dashboard will retry automatically when you return.</p>
     }
     setTimeout(() => renderLiveMatchCenter(), 700);
   };
@@ -1164,7 +1161,7 @@ function switchModule(nextModule) {
     return;
   }
 
-  const applySwitch = () => {
+        topRunMatch.event ? `Highest recent aggregate ${topRunMatch.total} in ${topRunMatch.event.strEvent}` : "Match board warming"
     runModuleTransition();
     state.activeModule = nextModule;
     localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
@@ -4535,15 +4532,14 @@ async function renderF1() {
       weather: "Unavailable",
       seasonCompleted: 0,
       seasonTotal: 0,
-      tickerItems: ["Race intelligence offline", "Retrying live services"]
+      tickerItems: ["Race coverage paused", "Refreshing live data"]
     });
     qs("#dashboardGrid").innerHTML = `
       <article class="glass-card card-span-12">
-        <h3 class="card-title">Data Stream Interrupted</h3>
+        <h3 class="card-title">Live Coverage Paused</h3>
         <p class="empty-state">
-          Live APIs could not be reached right now. The architecture is ready; verify internet access or endpoint availability and refresh.
+          Data is unavailable right now. The dashboard will retry automatically when the view is reopened.
         </p>
-        <p class="inline-meta">Debug: ${reason}</p>
       </article>
     `;
   } finally {
@@ -4887,7 +4883,7 @@ async function renderFootball() {
         <div class="football-chart-wrap">
           <canvas id="footballPointsChart" aria-label="Football points chart"></canvas>
         </div>
-        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.football.lastUpdated))}. Data source: API-Football.</p>
+        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.football.lastUpdated))}.</p>
         ${footballWarnings.length ? `<p class="inline-meta">Limited mode: ${escapeHtml(footballWarnings.join(" | "))}</p>` : ""}
       </article>
       `
@@ -4933,13 +4929,12 @@ async function renderFootball() {
       weather: "Unavailable",
       seasonCompleted: 0,
       seasonTotal: 0,
-      tickerItems: ["Football services offline", "Check API key, rate limits, or CORS"]
+      tickerItems: ["Football live view unavailable", "Retrying shortly"]
     });
     grid.innerHTML = `
       <article class="glass-card card-span-12 card-entry">
-        <h3 class="card-title">Football Data Stream Interrupted</h3>
-        <p class="empty-state">Unable to load the football APIs right now. Verify API-Football key validity and browser network access, then refresh.</p>
-        <p class="inline-meta">Debug: ${reason}</p>
+        <h3 class="card-title">Football Live View Unavailable</h3>
+        <p class="empty-state">Football data is unavailable right now. The dashboard will retry automatically when you return.</p>
       </article>
     `;
   } finally {
@@ -5166,7 +5161,7 @@ async function renderCricket() {
             </button>
           `).join("")}
         </div>
-        <p class="inline-meta">Cricket data source: TheSportsDB open feed. Premium match center overlays tactical grouping and dynamic sorting.</p>
+        <p class="inline-meta">Premium match center with live boards, form windows, and deeper record views.</p>
       </article>
       `
     );
@@ -5268,8 +5263,8 @@ async function renderCricket() {
           </article>
           <article class="cricket-record-item">
             <p class="kicker">Top Batter / Top Bowler</p>
-            <strong>Not available on this free endpoint</strong>
-            <p>Player stat feed is paywalled; this panel auto-upgrades once player stats API is connected.</p>
+            <strong>Player leaders coming soon</strong>
+            <p>This panel is ready for a richer stats feed when connected.</p>
           </article>
         </div>
         <p class="inline-meta">Record sample size: ${escapeHtml(String(records.sampleSize))} completed matches in current competition/league/gender/format scope.</p>
@@ -5280,7 +5275,7 @@ async function renderCricket() {
         <div class="cricket-chart-wrap">
           <canvas id="cricketMomentumChart" aria-label="Cricket run momentum chart"></canvas>
         </div>
-        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.cricket.lastUpdated))}. Data source: TheSportsDB cricket day feeds.</p>
+        <p class="inline-meta">Updated ${escapeHtml(footballKickoffLabel(state.cricket.lastUpdated))}. Auto-refresh is active for live score freshness.</p>
         ${warnings.length ? `<p class="inline-meta">Limited mode: ${escapeHtml(warnings.join(" | "))}</p>` : ""}
       </article>
       `
@@ -5339,7 +5334,6 @@ async function renderCricket() {
     setupCricketInsightEvents(formBoard);
   } catch (error) {
     console.error("renderCricket failed", error);
-    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown cricket data error";
     updateLiveHUD({
       raceName: "Cricket feed issue",
       localTime: "Unavailable",
@@ -5347,13 +5341,12 @@ async function renderCricket() {
       weather: "Unavailable",
       seasonCompleted: 0,
       seasonTotal: 0,
-      tickerItems: ["Cricket services offline", "Check endpoint availability or CORS"]
+      tickerItems: ["Cricket live view unavailable", "Retrying shortly"]
     });
     grid.innerHTML = `
       <article class="glass-card card-span-12 card-entry">
-        <h3 class="card-title">Cricket Data Stream Interrupted</h3>
-        <p class="empty-state">Unable to load cricket data now. Retry shortly; the module is wired and ready.</p>
-        <p class="inline-meta">Debug: ${reason}</p>
+        <h3 class="card-title">Cricket Live View Unavailable</h3>
+        <p class="empty-state">Cricket data is unavailable right now. The dashboard will retry automatically when you return.</p>
       </article>
     `;
   } finally {
@@ -5445,7 +5438,7 @@ async function renderNBA() {
       <article class="glass-card card-span-12 card-entry cricket-card-glow">
         <h3 class="card-title">Recent Results</h3>
         <div class="cricket-match-list">${recentRows || "<p class='empty-state'>Recent NBA results unavailable.</p>"}</div>
-        <p class="inline-meta">Open API source: TheSportsDB basketball feeds.</p>
+        <p class="inline-meta">Live basketball board with current scorelines and upcoming games.</p>
       </article>
       `
     );
@@ -5461,7 +5454,7 @@ async function renderNBA() {
       tickerItems: [
         liveGames.length ? `${liveGames.length} games live now` : "No live NBA games",
         leadGame ? `${leadGame.strHomeTeam || "Home"} vs ${leadGame.strAwayTeam || "Away"}` : "Waiting for next game",
-        `Open feed synced from TheSportsDB`
+        `Live basketball board synced`
       ]
     });
     if (!qs("#liveMatchCenterModal")?.classList.contains("hidden") && state.activeModule === "nba") {
@@ -5469,7 +5462,6 @@ async function renderNBA() {
     }
   } catch (error) {
     console.error("renderNBA failed", error);
-    const reason = error?.message ? escapeHtml(String(error.message)) : "Unknown basketball data error";
     updateLiveHUD({
       raceName: "Basketball feed issue",
       localTime: "Unavailable",
@@ -5477,13 +5469,12 @@ async function renderNBA() {
       weather: "Unavailable",
       seasonCompleted: 0,
       seasonTotal: 0,
-      tickerItems: ["Basketball services offline", "Check endpoint availability or CORS"]
+      tickerItems: ["Basketball live view unavailable", "Retrying shortly"]
     });
     grid.innerHTML = `
       <article class="glass-card card-span-12 card-entry">
-        <h3 class="card-title">NBA Data Stream Interrupted</h3>
-        <p class="empty-state">Unable to load open basketball feeds right now. Retry shortly.</p>
-        <p class="inline-meta">Debug: ${reason}</p>
+        <h3 class="card-title">Basketball Live View Unavailable</h3>
+        <p class="empty-state">Basketball data is unavailable right now. The dashboard will retry automatically when you return.</p>
       </article>
     `;
   } finally {
