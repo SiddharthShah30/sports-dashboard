@@ -1560,16 +1560,22 @@ function switchModule(nextModule) {
   }
 
   const applySwitch = () => {
+    setSportsLoadingScreen(nextModule);
+    setLoadingState(true);
     runModuleTransition();
-    state.activeModule = nextModule;
-    localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
-    renderModule();
+    setTimeout(() => {
+      state.activeModule = nextModule;
+      localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
+      renderModule();
+      setTimeout(() => {
+        setLoadingState(false);
+        hideSportsLoadingScreen();
+      }, 180);
+    }, 120);
   };
 
   if (document.startViewTransition) {
-    document.startViewTransition(() => {
-      applySwitch();
-    });
+    document.startViewTransition(() => applySwitch());
     return;
   }
 
@@ -2396,6 +2402,48 @@ function clearF1Intervals() {
 
 function setLoadingState(active) {
   document.body.classList.toggle("is-loading", Boolean(active));
+}
+
+function setSportsLoadingScreen(moduleName = state.activeModule) {
+  const screen = qs("#sportsLoadingScreen");
+  const title = qs("#sportsLoadingTitle");
+  const copy = qs("#sportsLoadingCopy");
+  const kicker = qs("#sportsLoadingKicker");
+  if (!screen || !title || !copy || !kicker) {
+    return;
+  }
+
+  const meta = SPORT_META[moduleName] || SPORT_META.f1;
+  const labels = {
+    f1: {
+      title: "Warming up race intel",
+      copy: "Refreshing telemetry, standings, and track conditions before the cockpit appears."
+    },
+    football: {
+      title: "Loading football coverage",
+      copy: "Pulling live fixtures, standings, scorers, and match events into the board."
+    },
+    cricket: {
+      title: "Loading cricket coverage",
+      copy: "Syncing live matches, scorecards, and player leaders into the match center."
+    },
+    nba: {
+      title: "Loading basketball coverage",
+      copy: "Refreshing live games, upcoming tipoffs, and recent results for the court view."
+    }
+  };
+  const next = labels[moduleName] || labels.f1;
+  kicker.textContent = meta.tag;
+  title.textContent = next.title;
+  copy.textContent = next.copy;
+  screen.classList.remove("hidden");
+}
+
+function hideSportsLoadingScreen() {
+  const screen = qs("#sportsLoadingScreen");
+  if (screen) {
+    screen.classList.add("hidden");
+  }
 }
 
 function formatCountdown(targetIso) {
@@ -5977,6 +6025,7 @@ function bindGlobalEvents() {
 
 function init() {
   try {
+    hideSportsLoadingScreen();
     bindGlobalEvents();
     renderModule();
     setupWelcomeSportModal();
