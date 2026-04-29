@@ -80,7 +80,10 @@ const state = {
     autoRefreshTimer: null,
     isLoading: false,
     momentumChart: null,
-    lastUpdated: ""
+    lastUpdated: "",
+    sourceLabel: "SportsDB",
+    buzzSnapshot: null,
+    snapshotUpdated: ""
   },
   nba: {
     games: [],
@@ -183,6 +186,11 @@ const FOOTBALL_LEAGUES = [
 
 const CRICKET_API = {
   baseUrl: "https://www.thesportsdb.com/api/v1/json/3"
+};
+
+const CRICKET_CRICBUZZ_API = {
+  baseUrl: "https://cricbuzz-cricket.p.rapidapi.com",
+  key: "ae641c0cf0msh9041c5c8f115ad9p1623c2jsndffe5e49bf62"
 };
 
 const TRACK_PATHS = {
@@ -638,6 +646,77 @@ async function fetchFootballLeaguesCatalog() {
   });
 }
 
+async function fetchFootballFixtureDeepDive(fixtureId) {
+  if (!fixtureId) {
+    return null;
+  }
+
+  const [eventsResult, statsResult, lineupsResult] = await Promise.allSettled([
+    fetchFootballJSON("/fixtures/events", { fixture: fixtureId }),
+    fetchFootballJSON("/fixtures/statistics", { fixture: fixtureId }),
+    fetchFootballJSON("/fixtures/lineups", { fixture: fixtureId })
+  ]);
+
+  return {
+    fixtureId,
+    events: eventsResult.status === "fulfilled" ? eventsResult.value?.response || [] : [],
+    statistics: statsResult.status === "fulfilled" ? statsResult.value?.response || [] : [],
+    lineups: lineupsResult.status === "fulfilled" ? lineupsResult.value?.response || [] : []
+  };
+}
+
+function renderFootballFixtureDeepDive(detail, leagueName = "Football") {
+  if (!detail) {
+    return "";
+  }
+
+  const eventRows = (detail.events || []).slice(0, 10).map((entry) => `
+    <div class="football-pulse-item">
+      <p class="kicker">${escapeHtml(entry?.time?.elapsed ? `${entry.time.elapsed}'` : "Event")}</p>
+      <strong>${escapeHtml(entry?.team?.name || "Team")}</strong>
+      <p>${escapeHtml(entry?.type || "Event")} • ${escapeHtml(entry?.detail || "No detail")}</p>
+    </div>
+  `).join("");
+
+  const statRows = (detail.statistics || []).map((teamPack) => {
+    const topStats = (teamPack?.statistics || []).slice(0, 4).map((stat) => `${stat?.type || "Stat"}: ${stat?.value ?? "-"}`).join(" • ");
+    return `
+      <article class="football-pulse-item">
+        <p class="kicker">${escapeHtml(teamPack?.team?.name || leagueName)}</p>
+        <strong>${escapeHtml(topStats || "Statistics unavailable")}</strong>
+      </article>
+    `;
+  }).join("");
+
+  const lineupRows = (detail.lineups || []).map((teamPack) => {
+    const starters = (teamPack?.startXI || []).slice(0, 5).map((player) => player?.player?.name || "Player").join(" • ");
+    return `
+      <article class="football-pulse-item">
+        <p class="kicker">${escapeHtml(teamPack?.team?.name || leagueName)}</p>
+        <strong>${escapeHtml(teamPack?.formation || "Lineup")}</strong>
+        <p>${escapeHtml(starters || "Lineup details unavailable")}</p>
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <article class="glass-card card-span-12 card-entry football-card-glow">
+      <h3 class="card-title">Live Match Deep Dive</h3>
+      <div class="football-pulse-grid">${eventRows || "<p class='empty-state'>No live event timeline available.</p>"}</div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry football-card-glow">
+      <h3 class="card-title">Match Statistics</h3>
+      <div class="football-pulse-grid">${statRows || "<p class='empty-state'>Match statistics unavailable.</p>"}</div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry football-card-glow">
+      <h3 class="card-title">Likely Lineups</h3>
+      <div class="football-pulse-grid">${lineupRows || "<p class='empty-state'>Lineup data unavailable.</p>"}</div>
+    </article>
+  `;
+}
+
 function bindInsightModalClose() {
   const refs = getInsightModalRefs();
   if (!refs) {
@@ -906,6 +985,275 @@ async function fetchSportsDbJSON(path, params = {}) {
   }
 }
 
+async function fetchCricbuzzJSON(path) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(`${CRICKET_CRICBUZZ_API.baseUrl}${path}`, {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: {
+        "X-RapidAPI-Key": CRICKET_CRICBUZZ_API.key,
+        "X-RapidAPI-Host": "cricbuzz-cricket.p.rapidapi.com"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Cricbuzz HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeCricbuzzMatch(matchInfo = {}, seriesName = "Series", matchType = "Unknown") {
+  const startDateMs = Number(matchInfo?.startDate || 0);
+  const kickoffIso = Number.isFinite(startDateMs) && startDateMs > 0 ? new Date(startDateMs).toISOString() : "";
+  const homeTeam = matchInfo?.team1?.teamName || "Team 1";
+  const awayTeam = matchInfo?.team2?.teamName || "Team 2";
+  const statusText = String(matchInfo?.status || matchInfo?.state || matchInfo?.matchDesc || "Scheduled").trim() || "Scheduled";
+
+  return {
+    idEvent: String(matchInfo?.matchId || ""),
+    matchId: String(matchInfo?.matchId || ""),
+    strEvent: `${homeTeam} vs ${awayTeam}`,
+    strLeague: seriesName,
+    strHomeTeam: homeTeam,
+    strAwayTeam: awayTeam,
+    strStatus: statusText,
+    strVenue: matchInfo?.venueInfo?.ground || "Venue TBD",
+    strCountry: matchInfo?.venueInfo?.country || "India",
+    strTime: kickoffIso ? kickoffIso.slice(11, 19) : "",
+    dateEvent: kickoffIso ? kickoffIso.slice(0, 10) : "",
+    cricbuzzKickoff: kickoffIso,
+    cricbuzzSeries: seriesName,
+    cricbuzzMatchType: matchType,
+    cricbuzzDescription: matchInfo?.matchDesc || "",
+    cricbuzzState: matchInfo?.state || "",
+    _timestamp: kickoffIso ? new Date(kickoffIso).getTime() : 0,
+    _statusBucket: String(matchInfo?.state || matchInfo?.status || "").toLowerCase().includes("live") ? "live" : "upcoming"
+  };
+}
+
+function flattenCricbuzzMatches(rawJson, matchType = "live") {
+  const matches = [];
+  (rawJson?.typeMatches || []).forEach((typeBlock) => {
+    const category = typeBlock?.matchType || "Unknown";
+    (typeBlock?.seriesMatches || []).forEach((seriesWrapper) => {
+      const series = seriesWrapper?.seriesAdWrapper || {};
+      const seriesName = series?.seriesName || "Unknown Series";
+      (series?.matches || []).forEach((match) => {
+        const matchInfo = match?.matchInfo || {};
+        matches.push(normalizeCricbuzzMatch(matchInfo, seriesName, category));
+      });
+    });
+  });
+
+  return matches.filter((match) => match.matchId);
+}
+
+function aggregateCricbuzzScorecards(scorecards = [], liveMatches = []) {
+  const batting = new Map();
+  const bowling = new Map();
+  const seriesBoard = new Map();
+
+  (liveMatches || []).forEach((match) => {
+    const key = match.cricbuzzSeries || match.strLeague || "Series";
+    if (!seriesBoard.has(key)) {
+      seriesBoard.set(key, {
+        series: key,
+        live: 0,
+        upcoming: 0,
+        completed: 0,
+        total: 0
+      });
+    }
+    const bucket = seriesBoard.get(key);
+    bucket.total += 1;
+    bucket[match._statusBucket === "live" ? "live" : "upcoming"] += 1;
+  });
+
+  (scorecards || []).forEach((payload) => {
+    (payload?.scorecard || []).forEach((innings) => {
+      (innings?.batsman || []).forEach((batsman) => {
+        const name = batsman?.name || "Unknown";
+        if (!batting.has(name)) {
+          batting.set(name, {
+            name,
+            runs: 0,
+            balls: 0,
+            fours: 0,
+            sixes: 0,
+            innings: 0,
+            strikeRate: 0,
+            team: innings?.batTeamDetails?.batTeamName || innings?.batteam || ""
+          });
+        }
+        const entry = batting.get(name);
+        entry.runs += toNum(batsman?.runs);
+        entry.balls += toNum(batsman?.balls);
+        entry.fours += toNum(batsman?.fours);
+        entry.sixes += toNum(batsman?.sixes);
+        entry.innings += 1;
+        entry.strikeRate += toNum(batsman?.strkrate);
+      });
+
+      (innings?.bowler || []).forEach((bowler) => {
+        const name = bowler?.name || "Unknown";
+        if (!bowling.has(name)) {
+          bowling.set(name, {
+            name,
+            overs: 0,
+            runs: 0,
+            wickets: 0,
+            economy: 0,
+            team: innings?.bowlTeamDetails?.bowlTeamName || innings?.bowteam || ""
+          });
+        }
+        const entry = bowling.get(name);
+        const overs = Number.parseFloat(String(bowler?.overs || 0)) || 0;
+        entry.overs += overs;
+        entry.runs += toNum(bowler?.runs);
+        entry.wickets += toNum(bowler?.wickets);
+        entry.economy = entry.overs > 0 ? Number((entry.runs / entry.overs).toFixed(2)) : entry.economy;
+      });
+    });
+  });
+
+  const battingLeaders = Array.from(batting.values())
+    .sort((a, b) => b.runs - a.runs || b.fours - a.fours || b.sixes - a.sixes)
+    .slice(0, 6);
+
+  const bowlingLeaders = Array.from(bowling.values())
+    .sort((a, b) => b.wickets - a.wickets || a.economy - b.economy || b.overs - a.overs)
+    .slice(0, 6);
+
+  const seriesRows = Array.from(seriesBoard.values())
+    .sort((a, b) => b.live - a.live || b.upcoming - a.upcoming || a.series.localeCompare(b.series));
+
+  return { battingLeaders, bowlingLeaders, seriesRows };
+}
+
+async function fetchCricbuzzCricketSnapshot() {
+  const [liveResult, upcomingResult] = await Promise.allSettled([
+    fetchCricbuzzJSON("/matches/v1/live"),
+    fetchCricbuzzJSON("/matches/v1/upcoming")
+  ]);
+
+  const liveMatches = liveResult.status === "fulfilled" ? flattenCricbuzzMatches(liveResult.value, "live") : [];
+  const upcomingMatches = upcomingResult.status === "fulfilled" ? flattenCricbuzzMatches(upcomingResult.value, "upcoming") : [];
+
+  if (!liveMatches.length && !upcomingMatches.length) {
+    return null;
+  }
+
+  const scorecards = await Promise.allSettled(
+    liveMatches.slice(0, 4).map((match) => fetchCricbuzzJSON(`/mcenter/v1/${match.matchId}/scard`))
+  );
+  const fulfilledScorecards = scorecards.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  const leaders = aggregateCricbuzzScorecards(fulfilledScorecards, [...liveMatches, ...upcomingMatches]);
+
+  return {
+    liveMatches,
+    upcomingMatches,
+    scorecards: fulfilledScorecards,
+    battingLeaders: leaders.battingLeaders,
+    bowlingLeaders: leaders.bowlingLeaders,
+    seriesRows: leaders.seriesRows,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function renderCricbuzzCricketExtras(snapshot) {
+  if (!snapshot) {
+    return "";
+  }
+
+  const liveRows = snapshot.liveMatches.slice(0, 5).map((match) => `
+    <article class="cricket-match-row live">
+      <div class="cricket-match-topline">
+        <span class="cricket-league-pill">${escapeHtml(match.cricbuzzSeries || match.strLeague || "Series")}</span>
+        <span class="cricket-format-pill">Cricbuzz</span>
+        <span class="cricket-status-pill live">${escapeHtml(match.strStatus || "Live")}</span>
+      </div>
+      <div class="cricket-match-mainline">
+        <strong>${escapeHtml(match.strHomeTeam || "Home")}</strong>
+        <span class="cricket-score">VS</span>
+        <span class="cricket-vs">LIVE</span>
+        <span class="cricket-score">${escapeHtml(match.strAwayTeam || "Away")}</span>
+        <strong>${escapeHtml(match.strAwayTeam || "Away")}</strong>
+      </div>
+      <div class="cricket-match-meta">
+        <p>${escapeHtml(match.cricbuzzDescription || match.strStatus || "Live now")}</p>
+        <p>${escapeHtml(match.strVenue || "Venue TBD")}</p>
+      </div>
+    </article>
+  `).join("");
+
+  const battingRows = snapshot.battingLeaders.map((player, index) => `
+    <div class="cricket-form-row">
+      <span>${index + 1}</span>
+      <strong>${escapeHtml(player.name)}</strong>
+      <span>${escapeHtml(String(player.runs))} R</span>
+      <span>${escapeHtml(String(player.balls))} B</span>
+      <span>${escapeHtml(String(player.fours))} 4s</span>
+      <span>${escapeHtml(String(player.sixes))} 6s</span>
+    </div>
+  `).join("");
+
+  const bowlingRows = snapshot.bowlingLeaders.map((player, index) => `
+    <div class="cricket-form-row">
+      <span>${index + 1}</span>
+      <strong>${escapeHtml(player.name)}</strong>
+      <span>${escapeHtml(String(player.wickets))} W</span>
+      <span>${escapeHtml(String(player.overs))} O</span>
+      <span>${escapeHtml(String(player.runs))} R</span>
+      <span>${escapeHtml(String(player.economy))} Eco</span>
+    </div>
+  `).join("");
+
+  const seriesRows = snapshot.seriesRows.map((series) => `
+    <article class="cricket-series-row">
+      <div>
+        <p class="kicker">Cricbuzz Series</p>
+        <strong>${escapeHtml(series.series)}</strong>
+      </div>
+      <div class="cricket-series-metrics">
+        <span><b>${series.live}</b> Live</span>
+        <span><b>${series.upcoming}</b> Upcoming</span>
+        <span><b>${series.total}</b> Total</span>
+      </div>
+    </article>
+  `).join("");
+
+  return `
+    <article class="glass-card card-span-12 card-entry cricket-card-glow">
+      <h3 class="card-title">Cricbuzz Live Feed</h3>
+      <div class="cricket-match-list">${liveRows || "<p class='empty-state'>No Cricbuzz live matches available right now.</p>"}</div>
+      <p class="inline-meta">Live and upcoming data from the Cricbuzz RapidAPI feed.</p>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry cricket-card-glow">
+      <h3 class="card-title">Cricbuzz Batting Leaders</h3>
+      <div class="cricket-form-list">${battingRows || "<p class='empty-state'>Batting leaders unavailable.</p>"}</div>
+    </article>
+
+    <article class="glass-card card-span-6 card-entry cricket-card-glow">
+      <h3 class="card-title">Cricbuzz Bowling Leaders</h3>
+      <div class="cricket-form-list">${bowlingRows || "<p class='empty-state'>Bowling leaders unavailable.</p>"}</div>
+    </article>
+
+    <article class="glass-card card-span-12 card-entry cricket-card-glow">
+      <h3 class="card-title">Cricbuzz Series Snapshot</h3>
+      <div class="cricket-series-list">${seriesRows || "<p class='empty-state'>Series snapshot unavailable.</p>"}</div>
+      <p class="inline-meta">Scorecard snippets are derived from the latest live fixtures and their inning tables.</p>
+    </article>
+  `;
+}
+
 function cricketDateOffset(days = 0) {
   const zone = state.timezone === "TRACK_AUTO"
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -1096,10 +1444,10 @@ function liveCenterRowsForModule() {
       line: `${row?.strHomeTeam || "Home"} ${parseCricketRuns(row?.intHomeScore || row?.strHomeScore)} : ${parseCricketRuns(row?.intAwayScore || row?.strAwayScore)} ${row?.strAwayTeam || "Away"}`,
       meta: `${row?.strLeague || "League"} • ${row?.strStatus || "LIVE"}`
     }));
-    const pinned = liveRows.slice(0, 4).map((row) => row.line);
+
     return {
       title: "Cricket Live Match Center",
-      pinned,
+      pinned: liveRows.slice(0, 4).map((row) => row.line),
       live: liveRows,
       upcoming: state.cricket.upcomingEvents.slice(0, 10).map((row) => ({
         line: `${row?.strHomeTeam || "Home"} vs ${row?.strAwayTeam || "Away"}`,
@@ -1150,54 +1498,59 @@ function renderLiveMatchCenter() {
     : "<p class='empty-state'>No rows available.</p>";
 
   bodyNode.innerHTML = `
-      title: "Apex Racing Dashboard",
-      blurb: "Race pace, live sessions, and championship pressure rendered in a refined broadcast layout.",
+    <section class="live-center-grid">
+      <article class="glass-card card-entry">
         <h4 class="card-title">Live</h4>
-      title: "Territory + Momentum",
-      blurb: "Live scoreboard pressure, fixtures, and league movement presented with premium clarity.",
-      <article class="glass-card">
-      title: "Session Pressure Engine",
-      blurb: "Live run-rate, chases, and innings swing compressed into a clean tactical surface.",
+        <div class="live-center-list">${makeRows(payload.live)}</div>
       </article>
-      title: "Possession Velocity",
-      blurb: "Shot rhythm, pace, and closing-time swings across active games in a clean live view.",
+      <article class="glass-card card-entry">
+        <h4 class="card-title">Upcoming</h4>
+        <div class="live-center-list">${makeRows(payload.upcoming)}</div>
+      </article>
+    </section>
+  `;
 }
 
-      title: "Football Live Match Center",
+function setupLiveMatchCenter() {
   const modal = qs("#liveMatchCenterModal");
   const openBtn = qs("#openLiveCenterBtn");
   const closeBtn = qs("#closeLiveCenterBtn");
   const refreshBtn = qs("#liveCenterRefreshBtn");
   if (!modal || !openBtn || !closeBtn || !refreshBtn) {
     return;
-      tickerItems: ["Football live view unavailable", "Retrying shortly"]
+  }
 
   const close = () => modal.classList.add("hidden");
 
-        <h3 class="card-title">Football Live View Unavailable</h3>
-        <p class="empty-state">Football data is unavailable right now. The dashboard will retry automatically when you return.</p>
+  openBtn.onclick = () => {
+    triggerMicroFeedback();
+    renderLiveMatchCenter();
     modal.classList.remove("hidden");
   };
 
   closeBtn.onclick = () => {
-    warnings.push("Live cards auto-refresh every 30 seconds");
+    triggerMicroFeedback();
+    close();
   };
-      tickerItems: [
-        liveGames.length ? `${liveGames.length} games live now` : "No live NBA games",
-        leadGame ? `${leadGame.strHomeTeam || "Home"} vs ${leadGame.strAwayTeam || "Away"}` : "Waiting for next game",
-        `Live basketball board synced`
-      ]
+
+  modal.onclick = (event) => {
+    if (event.target === modal) {
+      close();
+    }
   };
 
   refreshBtn.onclick = () => {
-      tickerItems: ["Basketball live view unavailable", "Retrying shortly"]
+    triggerMicroFeedback();
     if (state.activeModule === "football") {
       renderFootball();
     } else if (state.activeModule === "cricket") {
-        <h3 class="card-title">Basketball Live View Unavailable</h3>
-        <p class="empty-state">Basketball data is unavailable right now. The dashboard will retry automatically when you return.</p>
+      renderCricket();
+    } else if (state.activeModule === "nba") {
+      renderNBA();
+    } else {
+      renderF1();
     }
-    setTimeout(() => renderLiveMatchCenter(), 700);
+    renderLiveMatchCenter();
   };
 }
 
@@ -1206,7 +1559,7 @@ function switchModule(nextModule) {
     return;
   }
 
-        topRunMatch.event ? `Highest recent aggregate ${topRunMatch.total} in ${topRunMatch.event.strEvent}` : "Match board warming"
+  const applySwitch = () => {
     runModuleTransition();
     state.activeModule = nextModule;
     localStorage.setItem(STORAGE_KEYS.module, state.activeModule);
@@ -4423,7 +4776,10 @@ async function renderF1() {
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
     const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
 
-    qs("#raceTrackLayout").innerHTML = renderTrackMap(circuitId);
+    const raceTrackLayout = qs("#raceTrackLayout");
+    if (raceTrackLayout) {
+      raceTrackLayout.innerHTML = renderTrackMap(circuitId);
+    }
     setupUpcomingRaceActions(nextRace);
     renderPracticeStandouts(drivers);
     renderSprintInsight(nextRace, trackTimeZone);
@@ -4436,7 +4792,10 @@ async function renderF1() {
     renderGridAfterQualifying(nextRace, lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);
 
-    qs("#driverStandings").innerHTML = renderStandingsList(drivers);
+    const driverStandings = qs("#driverStandings");
+    if (driverStandings) {
+      driverStandings.innerHTML = renderStandingsList(drivers);
+    }
     setupDriverListEvents();
     setupStandingsExpandControl();
     setupCurrentStandingToggle();
@@ -4459,12 +4818,16 @@ async function renderF1() {
       })
       .join("");
 
-    qs("#driverA").innerHTML = optionsHtml;
-    qs("#driverB").innerHTML = optionsHtml;
-
-    const fallbackB = drivers[1]?.Driver?.driverId || drivers[0]?.Driver?.driverId || "";
-    qs("#driverA").value = state.f1.selectedDriverId || drivers[0]?.Driver?.driverId || "";
-    qs("#driverB").value = fallbackB;
+    const driverASelect = qs("#driverA");
+    const driverBSelect = qs("#driverB");
+    if (driverASelect) {
+      driverASelect.innerHTML = optionsHtml;
+      driverASelect.value = state.f1.selectedDriverId || drivers[0]?.Driver?.driverId || "";
+    }
+    if (driverBSelect) {
+      driverBSelect.innerHTML = optionsHtml;
+      driverBSelect.value = drivers[1]?.Driver?.driverId || drivers[0]?.Driver?.driverId || "";
+    }
     setupHeadToHeadEvents();
 
     if (!state.favoriteTeam) {
@@ -4478,6 +4841,9 @@ async function renderF1() {
     const staleProfileHero = qs("#profileHero");
     if (staleProfileHero) {
       staleProfileHero.remove();
+    }
+    if (!profileNode) {
+      return;
     }
     profileNode.innerHTML = "";
     const selectedCode = (selectedDriver?.Driver?.code || selectedDriver?.Driver?.familyName?.slice(0, 3) || "").toUpperCase();
@@ -4744,6 +5110,15 @@ async function renderFootball() {
     }
     const topScorers = (scorersData?.response || state.football.topScorers || []).slice(0, 6);
     const liveFixtures = liveData?.response || state.football.liveFixtures || [];
+    const spotlightFixture = liveFixtures[0] || upcomingFixtures[0] || null;
+    let footballDeepDive = null;
+    if (spotlightFixture?.fixture?.id) {
+      try {
+        footballDeepDive = await fetchFootballFixtureDeepDive(spotlightFixture.fixture.id);
+      } catch (error) {
+        footballWarnings.push("Live match deep dive unavailable");
+      }
+    }
     const leader = standingsTable[0] || null;
     const nextFixture = upcomingFixtures[0] || null;
     const topScorer = topScorers[0] || null;
@@ -4934,6 +5309,10 @@ async function renderFootball() {
       `
     );
 
+    if (footballDeepDive) {
+      grid.insertAdjacentHTML("beforeend", renderFootballFixtureDeepDive(footballDeepDive, featuredLeague.name));
+    }
+
     const countrySelect = qs("#footballCountryFilter");
     const leagueSearchInput = qs("#footballLeagueSearch");
     qsa("[data-football-league-option]").forEach((button) => {
@@ -5008,8 +5387,8 @@ async function renderCricket() {
 
   try {
     const warnings = [];
-    warnings.push("Player-level batter/wicket stats are not available on this free cricket feed");
     warnings.push("Live cards auto-refresh every 60 seconds");
+    const cricbuzzSnapshotPromise = fetchCricbuzzCricketSnapshot();
     if (!state.cricket.statusFilter) {
       state.cricket.statusFilter = "all";
     }
@@ -5095,6 +5474,18 @@ async function renderCricket() {
     const formBoard = buildCricketFormTable(recentForForm);
     const seriesBoard = buildCricketSeriesBoard(leagueScoped);
     const records = computeCricketRecords(recordsPool);
+    const cricbuzzSnapshot = await cricbuzzSnapshotPromise.catch(() => null);
+    if (cricbuzzSnapshot) {
+      state.cricket.sourceLabel = "Cricbuzz RapidAPI";
+      state.cricket.buzzSnapshot = cricbuzzSnapshot;
+      state.cricket.snapshotUpdated = cricbuzzSnapshot.updatedAt;
+      warnings.push("Cricbuzz live feed and scorecards connected");
+    } else {
+      state.cricket.sourceLabel = "SportsDB";
+      state.cricket.buzzSnapshot = null;
+      state.cricket.snapshotUpdated = "";
+      warnings.push("Player-level batting and bowling leaders are unavailable on the fallback feed");
+    }
     const leadLive = liveEvents[0] || upcomingEvents[0] || recentEvents[0] || null;
     const topRunMatch = recentForForm[0]
       ? recentForForm.reduce((best, event) => {
@@ -5325,6 +5716,10 @@ async function renderCricket() {
       </article>
       `
     );
+
+    if (cricbuzzSnapshot) {
+      grid.insertAdjacentHTML("beforeend", renderCricbuzzCricketExtras(cricbuzzSnapshot));
+    }
 
     const competitionSelect = qs("#cricketCompetitionFilter");
     const genderSelect = qs("#cricketGenderFilter");

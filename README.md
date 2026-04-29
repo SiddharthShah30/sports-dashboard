@@ -100,10 +100,12 @@ Shot chart placeholder and efficiency context cards, adapter endpoint callout.
 - Open-Meteo
 
 2. Football:
-- API-Football or Football-Data.org
+- API-Football for standings, fixtures, scorers, events, and lineups
+- Optional Football-Data.org fallback if you want a second feed
 
 3. Cricket:
-- CricketData.org or Cricbuzz via RapidAPI
+- Cricbuzz RapidAPI for live matches, upcoming matches, and scorecards
+- SportsDB fallback for broader day-by-day coverage
 
 4. NBA:
 - BallDontLie
