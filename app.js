@@ -1570,8 +1570,8 @@ function switchModule(nextModule) {
       setTimeout(() => {
         setLoadingState(false);
         hideSportsLoadingScreen();
-      }, 180);
-    }, 120);
+      }, 260);
+    }, 700);
   };
 
   if (document.startViewTransition) {
@@ -6025,10 +6025,17 @@ function bindGlobalEvents() {
 
 function init() {
   try {
-    hideSportsLoadingScreen();
+    setSportsLoadingScreen(state.activeModule);
+    setLoadingState(true);
     bindGlobalEvents();
-    renderModule();
-    setupWelcomeSportModal();
+    setTimeout(() => {
+      renderModule();
+      setupWelcomeSportModal();
+      setTimeout(() => {
+        setLoadingState(false);
+        hideSportsLoadingScreen();
+      }, 520);
+    }, 180);
   } catch (error) {
     console.error("startup failed", error);
     renderStartupFallback("The hub is loading. Please refresh in a moment.");
