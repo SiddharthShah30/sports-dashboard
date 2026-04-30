@@ -819,6 +819,31 @@ function setupFootballInsightEvents({ featuredLeague, standingsTable, upcomingFi
           }
         }
       });
+      // try to fetch and append latest lineup for this team from a nearby fixture
+      (async () => {
+        try {
+          const teamId = row.dataset.footballTeamId;
+          const candidate = (state.football.liveFixtures || []).concat(state.football.upcomingFixtures || []).find((f) => String(f?.teams?.home?.id) === String(teamId) || String(f?.teams?.away?.id) === String(teamId));
+          if (candidate?.fixture?.id) {
+            const detail = await fetchFootballFixtureDeepDive(candidate.fixture.id);
+            const refs = getInsightModalRefs();
+            if (refs && detail && detail.lineups && detail.lineups.length) {
+              const lineupHtml = detail.lineups.map((teamPack) => {
+                const starters = (teamPack?.startXI || []).map((p) => escapeHtml(p.player.name || p.player || "Player")).join("<br>");
+                return `
+                  <div class="insight-lineup">
+                    <p class="kicker">${escapeHtml(teamPack?.team?.name || "Team")}</p>
+                    <p>${starters || "No lineup available"}</p>
+                  </div>
+                `;
+              }).join("");
+              refs.bodyEl.insertAdjacentHTML("beforeend", `<h4 class="card-title">Latest Lineups</h4><div class="lineup-grid">${lineupHtml}</div>`);
+            }
+          }
+        } catch (e) {
+          // ignore lineup fetch failures
+        }
+      })();
     };
   });
 
@@ -853,6 +878,28 @@ function setupFootballInsightEvents({ featuredLeague, standingsTable, upcomingFi
       `;
 
       openInsightModal(`${homeName} vs ${awayName} • Match Insight`, content);
+
+      // fetch and append lineups for this fixture
+      (async () => {
+        try {
+          const detail = await fetchFootballFixtureDeepDive(button.getAttribute("data-football-fixture-id"));
+          const refs = getInsightModalRefs();
+          if (refs && detail && detail.lineups && detail.lineups.length) {
+            const lineupHtml = detail.lineups.map((teamPack) => {
+              const starters = (teamPack?.startXI || []).map((p) => escapeHtml(p.player.name || p.player || "Player")).join("<br>");
+              return `
+                <div class="insight-lineup">
+                  <p class="kicker">${escapeHtml(teamPack?.team?.name || "Team")}</p>
+                  <p>${starters || "No lineup available"}</p>
+                </div>
+              `;
+            }).join("");
+            refs.bodyEl.insertAdjacentHTML("beforeend", `<h4 class="card-title">Lineups</h4><div class="lineup-grid">${lineupHtml}</div>`);
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
 
       renderInsightChart({
         type: "bar",
@@ -2037,6 +2084,34 @@ function setupCricketInsightEvents(formBoard = []) {
 
       openInsightModal(`${homeTeam} vs ${awayTeam} • Cricket Insight`, content);
 
+      // attempt to append lineups from Cricbuzz snapshot if available
+      (async () => {
+        try {
+          const refs = getInsightModalRefs();
+          if (!refs) return;
+          const snapshot = state.cricket.buzzSnapshot;
+          if (snapshot && Array.isArray(snapshot.scorecards) && snapshot.scorecards.length) {
+            // try to match by team names
+            const matchCard = snapshot.scorecards.find((card) => {
+              const home = (card?.match || card?.meta || {}).homeTeam || card?.scorecard?.[0]?.batTeamDetails?.batTeamName || "";
+              const away = (card?.match || card?.meta || {}).awayTeam || card?.scorecard?.[0]?.bowlTeamDetails?.bowlTeamName || "";
+              return (String(homeTeam).toLowerCase().includes(String(home || "").toLowerCase()) && String(awayTeam).toLowerCase().includes(String(away || "").toLowerCase()))
+                || (String(awayTeam).toLowerCase().includes(String(home || "").toLowerCase()) && String(homeTeam).toLowerCase().includes(String(away || "").toLowerCase()));
+            });
+            if (matchCard) {
+              const innings = matchCard.scorecard || [];
+              const teamsHtml = innings.map((inn) => {
+                const teamName = inn?.batTeamDetails?.batTeamName || inn?.batteam || "Team";
+                const players = (inn?.batsman || []).map((b) => escapeHtml(b.name || b.batsman || "Player")).slice(0,11).join("<br>");
+                return `<div class="insight-lineup"><p class="kicker">${escapeHtml(teamName)}</p><p>${players || "Lineup unavailable"}</p></div>`;
+              }).join("");
+              refs.bodyEl.insertAdjacentHTML("beforeend", `<h4 class="card-title">Playing XIs</h4><div class="lineup-grid">${teamsHtml}</div>`);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
       renderInsightChart({
         type: "bar",
         data: {
@@ -2125,6 +2200,53 @@ function setupCricketInsightEvents(formBoard = []) {
           }
         }
       });
+    };
+  });
+}
+
+function setupNbaInsightEvents() {
+  qsa('.cricket-match-list .cricket-match-row').forEach((el) => {
+    el.onclick = () => {
+      const main = el.querySelector('.cricket-match-mainline');
+      const strongs = main ? main.querySelectorAll('strong') : [];
+      const home = strongs && strongs[0] ? strongs[0].textContent.trim() : 'Home';
+      const away = strongs && strongs[1] ? strongs[1].textContent.trim() : 'Away';
+      const scoreEls = main ? main.querySelectorAll('.cricket-score') : [];
+      const homeScore = scoreEls && scoreEls[0] ? scoreEls[0].textContent.trim() : '-';
+      const awayScore = scoreEls && scoreEls[1] ? scoreEls[1].textContent.trim() : '-';
+
+      const content = `
+        <div class="insight-grid">
+          <p><span>Match</span><strong>${escapeHtml(home)} vs ${escapeHtml(away)}</strong></p>
+          <p><span>Score</span><strong>${escapeHtml(homeScore)} - ${escapeHtml(awayScore)}</strong></p>
+          <p><span>Source</span><strong>SportsDB Snapshot</strong></p>
+        </div>
+        <div class="insight-lineup-wrap">
+          <p class="inline-meta">Lineups may be unavailable for basketball feeds. Showing roster when present.</p>
+        </div>
+      `;
+
+      openInsightModal(`${home} vs ${away} • Match Insight`, content);
+
+      // try to append roster if available in the event object
+      (async () => {
+        try {
+          const eventObj = (state.nba.liveGames || []).concat(state.nba.upcomingGames || []).find((g) => String(g?.strHomeTeam) === String(home) && String(g?.strAwayTeam) === String(away));
+          const refs = getInsightModalRefs();
+          if (refs && eventObj) {
+            // many feeds don't include lineup; try common fields
+            const homePlayers = eventObj?.homeLineup || eventObj?.homePlayers || [];
+            const awayPlayers = eventObj?.awayLineup || eventObj?.awayPlayers || [];
+            if ((homePlayers && homePlayers.length) || (awayPlayers && awayPlayers.length)) {
+              const homeHtml = (homePlayers || []).map((p) => `<div>${escapeHtml(p.name || p)}</div>`).join('');
+              const awayHtml = (awayPlayers || []).map((p) => `<div>${escapeHtml(p.name || p)}</div>`).join('');
+              refs.bodyEl.insertAdjacentHTML('beforeend', `<h4 class="card-title">Lineups / Roster</h4><div class="lineup-grid"><div class="insight-lineup"><p class="kicker">${escapeHtml(home)}</p>${homeHtml || '<p class="empty-state">Unavailable</p>'}</div><div class="insight-lineup"><p class="kicker">${escapeHtml(away)}</p>${awayHtml || '<p class="empty-state">Unavailable</p>'}</div></div>`);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
     };
   });
 }
@@ -4909,6 +5031,11 @@ async function renderF1() {
         `Local start ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`
       ]
     });
+    try {
+      setupNbaInsightEvents();
+    } catch (e) {
+      // ignore
+    }
 
     const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
     const circuitId = nextRace?.Circuit?.circuitId || "silverstone";

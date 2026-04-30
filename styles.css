@@ -2888,6 +2888,20 @@ body.is-loading .loading-skeleton {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.lineup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.8rem;
+  margin-top: 0.6rem;
+}
+.insight-lineup {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: rgba(255,255,255,0.02);
+}
+.insight-lineup .kicker { color: var(--text-2); margin: 0 0 0.35rem 0; font-size: 0.78rem; }
+
 #insightChartCanvas {
   width: 100% !important;
   height: 100% !important;
