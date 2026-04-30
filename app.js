@@ -1411,10 +1411,11 @@ function renderModuleHero() {
   };
 
   const hero = heroMap[state.activeModule] || heroMap.f1;
+  const meta = SPORT_META[state.activeModule] || SPORT_META.f1;
   host.innerHTML = `
     <article class="glass-card module-hero-card card-entry" data-hero-module="${escapeHtml(state.activeModule)}">
       <div>
-        <p class="kicker">Sports Hub Narrative</p>
+        <p class="kicker">${escapeHtml(meta.tag)}</p>
         <h2>${escapeHtml(hero.title)}</h2>
         <p>${escapeHtml(hero.blurb)}</p>
       </div>
