@@ -1570,8 +1570,8 @@ function switchModule(nextModule) {
       setTimeout(() => {
         setLoadingState(false);
         hideSportsLoadingScreen();
-      }, 260);
-    }, 700);
+      }, 500);
+    }, 1100);
   };
 
   if (document.startViewTransition) {
@@ -3417,6 +3417,94 @@ function renderTelemetryFeed(nextRace, racePhaseLabel) {
   `;
 }
 
+function renderSportTelemetry(moduleName, opts = {}) {
+  const hostId = `${moduleName}TelemetryCard`;
+  const existing = qs(`#${hostId}`);
+  const grid = qs("#dashboardGrid");
+  if (!grid) return;
+
+  const label = opts.label || (moduleName === "cricket" ? "Match Center" : "Command Center");
+  const targetIso = opts.targetIso || null;
+  const countdownText = targetIso ? formatCountdown(targetIso) : "TBD";
+
+  const html = `
+    <article id="${hostId}" class="glass-card card-span-12 telemetry-card">
+      <div class="telemetry-card-inner">
+        <div class="telemetry-left">
+          <p class="kicker">${escapeHtml(label)}</p>
+          <h4>${escapeHtml(opts.subtitle || (moduleName === "cricket" ? "Live match timer" : "Next kickoff"))}</h4>
+          <p class="telemetry-countdown" id="${hostId}-countdown">${escapeHtml(countdownText)}</p>
+          <p class="inline-meta">${escapeHtml(opts.meta || "Selectable timers and telemetry for quick match context")}</p>
+        </div>
+        <div class="telemetry-right">
+          <label>Timezone
+            <select id="${hostId}-tz" class="select-input small">
+              <option value="LOCAL">Local</option>
+              <option value="UTC">UTC</option>
+            </select>
+          </label>
+          <label>View
+            <select id="${hostId}-view" class="select-input small">
+              <option value="auto">Auto</option>
+              <option value="timer">Timer</option>
+              <option value="events">Event Log</option>
+              <option value="stats">Stats</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </article>
+  `;
+
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    grid.insertAdjacentHTML("afterbegin", html);
+  }
+
+  // wire controls
+  const tz = qs(`#${hostId}-tz`);
+  const view = qs(`#${hostId}-view`);
+  if (tz) {
+    tz.value = state.timezone || "LOCAL";
+    tz.onchange = () => {
+      state.timezone = tz.value === "LOCAL" ? Intl.DateTimeFormat().resolvedOptions().timeZone : tz.value;
+      triggerMicroFeedback();
+      // refresh module to apply timezone change
+      renderModule();
+    };
+  }
+  if (view) {
+    view.onchange = () => {
+      state[`${moduleName}`].telemetryView = view.value;
+      triggerMicroFeedback();
+    };
+  }
+
+  // countdown ticker
+  try {
+    if (state[moduleName].telemetryTicker) {
+      clearInterval(state[moduleName].telemetryTicker);
+      state[moduleName].telemetryTicker = null;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  const countdownEl = qs(`#${hostId}-countdown`);
+  if (countdownEl) {
+    const update = () => {
+      if (!targetIso) {
+        countdownEl.textContent = "TBD";
+        return;
+      }
+      countdownEl.textContent = formatCountdown(targetIso);
+    };
+    update();
+    state[moduleName].telemetryTicker = setInterval(update, 1000);
+  }
+}
+
 function renderSeasonCalendar(races) {
   const host = qs("#seasonCalendarStrip");
   const detail = qs("#seasonCalendarDetail");
@@ -5205,6 +5293,18 @@ async function renderFootball() {
       tickerItems
     });
 
+    // Render a compact telemetry/timer panel similar to F1 for quick match context
+    try {
+      renderSportTelemetry("football", {
+        label: featuredLeague.name,
+        subtitle: nextFixture ? `${nextFixture.teams.home.name} vs ${nextFixture.teams.away.name}` : "Upcoming kickoff",
+        targetIso: nextFixture?.fixture?.date || null,
+        meta: `${liveFixtures.length} live fixtures • ${topScorers.length} scorers tracked`
+      });
+    } catch (e) {
+      // non-fatal
+    }
+
     const cards = [
       {
         title: "Live Match Centers",
@@ -5567,6 +5667,18 @@ async function renderCricket() {
         topRunMatch.event ? `Highest recent run aggregate ${topRunMatch.total} in ${topRunMatch.event.strEvent}` : "Run-rate feed warming"
       ]
     });
+
+    // Add an F1-like telemetry/timer panel for cricket
+    try {
+      renderSportTelemetry("cricket", {
+        label: leadLive ? (leadLive.strEvent || leadLive.strLeague) : "Cricket Match Center",
+        subtitle: leadLive ? `${leadLive.strHomeTeam || "Home"} vs ${leadLive.strAwayTeam || "Away"}` : "Next match",
+        targetIso: leadLive?.dateEvent ? `${leadLive.dateEvent}T${leadLive.strTime || "00:00:00Z"}` : null,
+        meta: `${liveEvents.length} live • ${upcomingEvents.length} upcoming`
+      });
+    } catch (e) {
+      // Ignore telemetry render failures
+    }
 
     const cards = [
       { title: "Live Match Centers", value: String(liveEvents.length), subtitle: "Active live scorecards" },
@@ -6034,8 +6146,8 @@ function init() {
       setTimeout(() => {
         setLoadingState(false);
         hideSportsLoadingScreen();
-      }, 520);
-    }, 180);
+      }, 900);
+    }, 420);
   } catch (error) {
     console.error("startup failed", error);
     renderStartupFallback("The hub is loading. Please refresh in a moment.");

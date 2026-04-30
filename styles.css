@@ -1391,6 +1391,22 @@ body.is-loading .loading-skeleton {
   margin: 0.58rem 0 0.64rem;
 }
 
+.telemetry-card {
+  padding: 0.6rem;
+}
+.telemetry-card .telemetry-card-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.telemetry-left .kicker { margin: 0; color: var(--text-2); font-size: 0.78rem; }
+.telemetry-left h4 { margin: 0.25rem 0; font-size: 1rem; }
+.telemetry-countdown { font-weight: 700; font-size: 0.98rem; margin: 0.25rem 0; }
+.telemetry-right { display: flex; gap: 0.6rem; align-items: center; }
+.telemetry-card .select-input.small { width: 140px; }
+
+
 .telemetry-item {
   border: 1px solid var(--line-soft);
   border-radius: 10px;
