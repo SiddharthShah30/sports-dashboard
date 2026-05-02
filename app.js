@@ -2490,13 +2490,22 @@ async function fetchOpenF1DriverMedia() {
   }
 }
 
-function normalizeOpenF1SessionResultRows(rows = []) {
+function normalizeOpenF1SessionResultRows(rows = [], driverMap = {}) {
   return (rows || [])
     .map((row) => ({
       position: toNum(row?.position) || 99,
-      driverName: row?.full_name || row?.broadcast_name || row?.driver_name || row?.name_acronym || "Driver",
-      teamName: row?.team_name || "Team",
-      metric: row?.time || row?.lap_time || row?.status || "-"
+      driverName:
+        row?.full_name
+        || row?.broadcast_name
+        || row?.driver_name
+        || row?.name_acronym
+        || driverMap[String(row?.driver_number || "")]?.name
+        || `#${row?.driver_number || "?"}`,
+      teamName: row?.team_name || driverMap[String(row?.driver_number || "")]?.team || "Team",
+      metric:
+        row?.time
+        || row?.lap_time
+        || (Array.isArray(row?.duration) && row.duration.length ? `${Number(row.duration[row.duration.length - 1]).toFixed(3)}s` : "-")
     }))
     .filter((row) => row.position > 0)
     .sort((a, b) => a.position - b.position);
@@ -2516,20 +2525,48 @@ function normalizeErgastRows(rows = []) {
 
 async function fetchLatestOpenF1Board(sessionNames = [], fallbackLoader = null, label = "Session") {
   try {
+    const now = Date.now();
+    const allCandidates = [];
     for (const sessionName of sessionNames) {
-      const sessions = await fetchJSON(`https://api.openf1.org/v1/sessions?session_name=${encodeURIComponent(sessionName)}&year=${new Date().getUTCFullYear()}`);
-      const latest = [...(sessions || [])]
-        .filter((row) => row?.session_key)
-        .sort((a, b) => new Date(b?.date_start || 0).getTime() - new Date(a?.date_start || 0).getTime())[0];
-      if (!latest?.session_key) {
+      const sessions = await fetchJSON(`https://api.openf1.org/v1/sessions?session_name=${encodeURIComponent(sessionName)}`);
+      (sessions || []).forEach((row) => {
+        if (row?.session_key) {
+          allCandidates.push({ ...row, _sessionName: sessionName });
+        }
+      });
+    }
+
+    const candidates = allCandidates
+      .sort((a, b) => new Date(b?.date_start || 0).getTime() - new Date(a?.date_start || 0).getTime());
+
+    for (const latest of candidates) {
+      const startStamp = new Date(latest?.date_start || 0).getTime();
+      const endStamp = latest?.date_end ? new Date(latest.date_end).getTime() : NaN;
+      const completed = Number.isFinite(endStamp) ? endStamp <= now : startStamp <= (now - 1000 * 60 * 45);
+      if (!completed) {
         continue;
       }
-      const resultRows = await fetchJSON(`https://api.openf1.org/v1/session_result?session_key=${latest.session_key}`);
-      const normalized = normalizeOpenF1SessionResultRows(resultRows).slice(0, 10);
+
+      const [resultRows, sessionDrivers] = await Promise.all([
+        fetchJSON(`https://api.openf1.org/v1/session_result?session_key=${latest.session_key}`),
+        fetchJSON(`https://api.openf1.org/v1/drivers?session_key=${latest.session_key}`).catch(() => [])
+      ]);
+      const driverMap = {};
+      (sessionDrivers || []).forEach((driver) => {
+        const key = String(driver?.driver_number || "");
+        if (!key) {
+          return;
+        }
+        driverMap[key] = {
+          name: driver?.full_name || driver?.broadcast_name || driver?.last_name || `#${key}`,
+          team: driver?.team_name || "Team"
+        };
+      });
+      const normalized = normalizeOpenF1SessionResultRows(resultRows, driverMap).slice(0, 10);
       if (normalized.length) {
         return {
           label,
-          sessionName,
+          sessionName: latest?._sessionName || latest?.session_name || label,
           venue: latest?.country_name || latest?.location || "",
           updatedAt: latest?.date_start || "",
           rows: normalized
@@ -5181,7 +5218,7 @@ async function renderF1() {
     const [latestPracticeBoard, latestSprintShootoutBoard, latestSprintRaceBoard] = await Promise.all([
       fetchLatestOpenF1Board(["Practice 3", "Practice 2", "Practice 1"], null, "Practice"),
       fetchLatestOpenF1Board(
-        ["Sprint Shootout", "Sprint Qualifying"],
+        ["Sprint Qualifying", "Sprint Shootout"],
         async () => {
           const qual = await fetchErgast("/current/last/qualifying.json");
           const rows = qual?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
