@@ -51,7 +51,10 @@ const state = {
     recentFormRound: 0,
     standingView: "drivers",
     quizIndex: 0,
-    quizScore: 0
+    quizScore: 0,
+    latestPracticeBoard: null,
+    latestSprintShootoutBoard: null,
+    latestSprintRaceBoard: null
   },
   football: {
     season: new Date().getUTCMonth() >= 6 ? new Date().getUTCFullYear() : new Date().getUTCFullYear() - 1,
@@ -2487,6 +2490,67 @@ async function fetchOpenF1DriverMedia() {
   }
 }
 
+function normalizeOpenF1SessionResultRows(rows = []) {
+  return (rows || [])
+    .map((row) => ({
+      position: toNum(row?.position) || 99,
+      driverName: row?.full_name || row?.broadcast_name || row?.driver_name || row?.name_acronym || "Driver",
+      teamName: row?.team_name || "Team",
+      metric: row?.time || row?.lap_time || row?.status || "-"
+    }))
+    .filter((row) => row.position > 0)
+    .sort((a, b) => a.position - b.position);
+}
+
+function normalizeErgastRows(rows = []) {
+  return (rows || [])
+    .map((row) => ({
+      position: toNum(row?.position) || 99,
+      driverName: `${row?.Driver?.givenName || ""} ${row?.Driver?.familyName || ""}`.trim() || "Driver",
+      teamName: row?.Constructor?.name || "Team",
+      metric: row?.Q3 || row?.Q2 || row?.Q1 || row?.Time?.time || row?.status || "-"
+    }))
+    .filter((row) => row.position > 0)
+    .sort((a, b) => a.position - b.position);
+}
+
+async function fetchLatestOpenF1Board(sessionNames = [], fallbackLoader = null, label = "Session") {
+  try {
+    for (const sessionName of sessionNames) {
+      const sessions = await fetchJSON(`https://api.openf1.org/v1/sessions?session_name=${encodeURIComponent(sessionName)}&year=${new Date().getUTCFullYear()}`);
+      const latest = [...(sessions || [])]
+        .filter((row) => row?.session_key)
+        .sort((a, b) => new Date(b?.date_start || 0).getTime() - new Date(a?.date_start || 0).getTime())[0];
+      if (!latest?.session_key) {
+        continue;
+      }
+      const resultRows = await fetchJSON(`https://api.openf1.org/v1/session_result?session_key=${latest.session_key}`);
+      const normalized = normalizeOpenF1SessionResultRows(resultRows).slice(0, 10);
+      if (normalized.length) {
+        return {
+          label,
+          sessionName,
+          venue: latest?.country_name || latest?.location || "",
+          updatedAt: latest?.date_start || "",
+          rows: normalized
+        };
+      }
+    }
+  } catch (error) {
+    // fallback below
+  }
+
+  if (typeof fallbackLoader === "function") {
+    try {
+      return await fallbackLoader();
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 async function fetchTeamLogoMap(constructors) {
   const entries = await Promise.all(
     constructors.map(async (entry) => {
@@ -3258,7 +3322,7 @@ function renderTrackMap(circuitId) {
   `;
 }
 
-function renderPracticeStandouts(drivers) {
+function renderPracticeStandouts(drivers, practiceBoard = null) {
   const host = qs("#practiceStandouts");
   if (!host) {
     return;
@@ -3289,6 +3353,16 @@ function renderPracticeStandouts(drivers) {
     .slice(0, 5);
 
   host.innerHTML = `
+    <p class="inline-meta">Latest practice results${practiceBoard?.sessionName ? ` • ${escapeHtml(practiceBoard.sessionName)}` : ""}</p>
+    <div class="mini-table">
+      ${(practiceBoard?.rows || []).slice(0, 8).map((row) => `
+        <div class="mini-row">
+          <span>P${escapeHtml(String(row.position))}</span>
+          <span>${escapeHtml(row.driverName)}</span>
+          <span>${escapeHtml(row.metric)}</span>
+        </div>
+      `).join("") || "<p class='empty-state'>Practice result feed unavailable. Showing pace watchlist below.</p>"}
+    </div>
     <p class="inline-meta">Practice Watchlist (recent-form proxy): best average race pace over recent rounds.</p>
     <div class="practice-list">
       ${standouts.map((row, idx) => `
@@ -3301,7 +3375,7 @@ function renderPracticeStandouts(drivers) {
   `;
 }
 
-function renderSprintInsight(nextRace, trackTimeZone) {
+function renderSprintInsight(nextRace, trackTimeZone, sprintShootoutBoard = null, sprintRaceBoard = null) {
   const host = qs("#sprintInsight");
   if (!host) {
     return;
@@ -3331,6 +3405,26 @@ function renderSprintInsight(nextRace, trackTimeZone) {
       <p><strong>Sprint Shootout:</strong> ${escapeHtml(shootout.dateLabel)} ${escapeHtml(shootout.timeLabel)} ${escapeHtml(shootout.zoneLabel)}</p>
       <p><strong>Sprint Race:</strong> ${escapeHtml(sprintRace.dateLabel)} ${escapeHtml(sprintRace.timeLabel)} ${escapeHtml(sprintRace.zoneLabel)}</p>
       <p class="inline-meta">Sprint format can reset race-weekend momentum and grid strategy.</p>
+    </div>
+    <p class="inline-meta">Latest Sprint Shootout Results</p>
+    <div class="mini-table">
+      ${(sprintShootoutBoard?.rows || []).slice(0, 8).map((row) => `
+        <div class="mini-row">
+          <span>P${escapeHtml(String(row.position))}</span>
+          <span>${escapeHtml(row.driverName)}</span>
+          <span>${escapeHtml(row.metric)}</span>
+        </div>
+      `).join("") || "<p class='empty-state'>Sprint Shootout results unavailable right now.</p>"}
+    </div>
+    <p class="inline-meta">Latest Sprint Race Results</p>
+    <div class="mini-table">
+      ${(sprintRaceBoard?.rows || []).slice(0, 8).map((row) => `
+        <div class="mini-row">
+          <span>P${escapeHtml(String(row.position))}</span>
+          <span>${escapeHtml(row.driverName)}</span>
+          <span>${escapeHtml(row.metric)}</span>
+        </div>
+      `).join("") || "<p class='empty-state'>Sprint race results unavailable right now.</p>"}
     </div>
   `;
 }
@@ -5083,6 +5177,45 @@ async function renderF1() {
       state.f1.recentFormMap = await fetchRecentDriverForm();
       state.f1.recentFormRound = completedRound;
     }
+
+    const [latestPracticeBoard, latestSprintShootoutBoard, latestSprintRaceBoard] = await Promise.all([
+      fetchLatestOpenF1Board(["Practice 3", "Practice 2", "Practice 1"], null, "Practice"),
+      fetchLatestOpenF1Board(
+        ["Sprint Shootout", "Sprint Qualifying"],
+        async () => {
+          const qual = await fetchErgast("/current/last/qualifying.json");
+          const rows = qual?.MRData?.RaceTable?.Races?.[0]?.QualifyingResults || [];
+          return {
+            label: "Sprint Shootout",
+            sessionName: "Latest Qualifying Snapshot",
+            venue: qual?.MRData?.RaceTable?.Races?.[0]?.raceName || "",
+            updatedAt: new Date().toISOString(),
+            rows: normalizeErgastRows(rows).slice(0, 10)
+          };
+        },
+        "Sprint Shootout"
+      ),
+      fetchLatestOpenF1Board(
+        ["Sprint"],
+        async () => {
+          const sprint = await fetchErgast("/current/last/sprint.json");
+          const rows = sprint?.MRData?.RaceTable?.Races?.[0]?.SprintResults || [];
+          return {
+            label: "Sprint",
+            sessionName: sprint?.MRData?.RaceTable?.Races?.[0]?.raceName || "Latest Sprint",
+            venue: sprint?.MRData?.RaceTable?.Races?.[0]?.Circuit?.circuitName || "",
+            updatedAt: new Date().toISOString(),
+            rows: normalizeErgastRows(rows).slice(0, 10)
+          };
+        },
+        "Sprint"
+      )
+    ]);
+
+    state.f1.latestPracticeBoard = latestPracticeBoard;
+    state.f1.latestSprintShootoutBoard = latestSprintShootoutBoard;
+    state.f1.latestSprintRaceBoard = latestSprintRaceBoard;
+
     state.f1.driverMediaMap = driverMediaMap;
     state.f1.teamLogoMap = teamLogoMap;
 
@@ -5164,8 +5297,13 @@ async function renderF1() {
       raceTrackLayout.innerHTML = renderTrackMap(circuitId);
     }
     setupUpcomingRaceActions(resolvedNextRace);
-    renderPracticeStandouts(drivers);
-    renderSprintInsight(resolvedNextRace, trackTimeZone);
+    renderPracticeStandouts(drivers, state.f1.latestPracticeBoard);
+    renderSprintInsight(
+      resolvedNextRace,
+      trackTimeZone,
+      state.f1.latestSprintShootoutBoard,
+      state.f1.latestSprintRaceBoard
+    );
     setupTrackViewOptions();
 
     renderSeasonCalendar(seasonCalendar);
