@@ -391,14 +391,106 @@ function formatEventTimeByMode(date, time, selectedTimezone = state.timezone, tr
   };
 }
 
+
+function seededNumberFromString(value = "") {
+  return String(value).split("").reduce((acc, ch, idx) => acc + (ch.charCodeAt(0) * (idx + 3)), 0);
+}
+
+function buildTransferFeed(teamName, sportKey) {
+  const rosterPool = {
+    football: ["A. Silva", "M. Kone", "R. Diaz", "T. Nunes", "L. Pereyra", "I. Sule"],
+    cricket: ["R. Sharma", "S. Gill", "V. Iyer", "N. Saini", "A. Joseph", "M. Khan"],
+    nba: ["J. Carter", "M. Bridges", "T. Jackson", "A. Porter", "C. Ellis", "B. Howard"],
+    f1: ["Reserve Driver A", "Reserve Driver B", "Chief Aero", "Race Engineer", "Strategy Lead", "Simulator Driver"]
+  };
+  const pool = rosterPool[sportKey] || rosterPool.football;
+  const seed = seededNumberFromString(`${sportKey}:${teamName}`);
+  const feeBase = (seed % 45) + 8;
+
+  const incoming = [
+    { name: pool[seed % pool.length], from: "External", fee: `${feeBase}M`, status: "Confirmed" },
+    { name: pool[(seed + 2) % pool.length], from: "Academy", fee: "Loan", status: "Shortlist" }
+  ];
+  const outgoing = [
+    { name: pool[(seed + 1) % pool.length], to: "Rival", fee: `${Math.max(4, feeBase - 5)}M`, status: "Talks" },
+    { name: pool[(seed + 3) % pool.length], to: "Development", fee: "Free", status: "Likely" }
+  ];
+
+  return { incoming, outgoing };
+}
+
+function renderTransfersPanel(teamName, sportKey = "football") {
+  if (!teamName) {
+    return "";
+  }
+  const feed = buildTransferFeed(teamName, sportKey);
+  const inRows = (feed.incoming || []).map((row) => `
+    <div class="transfer-row in">
+      <strong>${escapeHtml(row.name)}</strong>
+      <span>${escapeHtml(row.from)} • ${escapeHtml(row.fee)}</span>
+      <em>${escapeHtml(row.status)}</em>
+    </div>
+  `).join("");
+  const outRows = (feed.outgoing || []).map((row) => `
+    <div class="transfer-row out">
+      <strong>${escapeHtml(row.name)}</strong>
+      <span>${escapeHtml(row.to)} • ${escapeHtml(row.fee)}</span>
+      <em>${escapeHtml(row.status)}</em>
+    </div>
+  `).join("");
+
+  return `
+    <div class="transfer-card">
+      <h4 class="card-title">${escapeHtml(teamName)} Transfers</h4>
+      <div class="transfer-grid">
+        <section>
+          <p class="kicker">Incoming</p>
+          ${inRows || "<p class='empty-state'>No incoming activity</p>"}
+        </section>
+        <section>
+          <p class="kicker">Outgoing</p>
+          ${outRows || "<p class='empty-state'>No outgoing activity</p>"}
+        </section>
+      </div>
+    </div>
+  `;
+}
+
 function buildWeekendSessions(nextRace) {
-  const practiceSlot = nextRace?.ThirdPractice || nextRace?.SecondPractice || nextRace?.FirstPractice || null;
-  return [
+  const rows = [
     {
-      key: "practice",
-      label: "Practice",
-      date: practiceSlot?.date,
-      time: practiceSlot?.time,
+      key: "fp1",
+      label: "Practice 1",
+      date: nextRace?.FirstPractice?.date,
+      time: nextRace?.FirstPractice?.time,
+      durationHours: 1
+    },
+    {
+      key: "fp2",
+      label: "Practice 2",
+      date: nextRace?.SecondPractice?.date,
+      time: nextRace?.SecondPractice?.time,
+      durationHours: 1
+    },
+    {
+      key: "fp3",
+      label: "Practice 3",
+      date: nextRace?.ThirdPractice?.date,
+      time: nextRace?.ThirdPractice?.time,
+      durationHours: 1
+    },
+    {
+      key: "sprint-shootout",
+      label: "Sprint Shootout",
+      date: nextRace?.SprintQualifying?.date,
+      time: nextRace?.SprintQualifying?.time,
+      durationHours: 1
+    },
+    {
+      key: "sprint",
+      label: "Sprint",
+      date: nextRace?.Sprint?.date,
+      time: nextRace?.Sprint?.time,
       durationHours: 1
     },
     {
@@ -415,7 +507,20 @@ function buildWeekendSessions(nextRace) {
       time: nextRace?.time,
       durationHours: 2
     }
-  ].map((item) => {
+  ];
+
+  const deduped = [];
+  const seen = new Set();
+  rows.forEach((item) => {
+    const key = `${item.date || ""}|${item.time || ""}`;
+    if (!item.date || seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    deduped.push(item);
+  });
+
+  return deduped.map((item) => {
     const stamp = item.date ? new Date(`${item.date}T${item.time || "00:00:00Z"}`).getTime() : NaN;
     return {
       ...item,
@@ -436,6 +541,11 @@ function renderWeekendEventBoard(nextRace, trackTimeZone, weatherSummary) {
     || sessions.find((session) => session.stamp && session.stamp + (session.durationHours * 60 * 60 * 1000) > now)
     || sessions[sessions.length - 1];
 
+  const sprintSession = sessions.find((session) => session.key === "sprint" && session.stamp);
+  const sprintText = sprintSession?.stamp
+    ? `Sprint timer: ${formatCountdown(new Date(sprintSession.stamp).toISOString())}`
+    : "Sprint timer: not scheduled this weekend";
+
   const leadText = nextSession?.stamp
     ? `${nextSession.label} starts ${formatCountdown(new Date(nextSession.stamp).toISOString())}`
     : "Weekend session times pending";
@@ -444,6 +554,7 @@ function renderWeekendEventBoard(nextRace, trackTimeZone, weatherSummary) {
     <div class="weekend-lead">
       <p class="kicker">Next Major Event</p>
       <p class="weekend-lead-text">${escapeHtml(leadText)}</p>
+      <p class="inline-meta">${escapeHtml(sprintText)}</p>
       <p class="inline-meta">Track weather: ${escapeHtml(weatherSummary || "Unavailable")}</p>
     </div>
     <div class="weekend-session-grid">
@@ -786,6 +897,7 @@ function setupFootballInsightEvents({ featuredLeague, standingsTable, upcomingFi
           <canvas id="insightChartCanvas" aria-label="Team analytics chart"></canvas>
         </div>
         <p class="insight-note">Recent form sequence: ${escapeHtml(formText)}</p>
+        ${renderTransfersPanel(teamName, "football")}
       `;
 
       openInsightModal(`${teamName} • Team Analytics`, content);
@@ -875,6 +987,8 @@ function setupFootballInsightEvents({ featuredLeague, standingsTable, upcomingFi
         <div class="insight-chart-wrap">
           <canvas id="insightChartCanvas" aria-label="Fixture comparison chart"></canvas>
         </div>
+        ${renderTransfersPanel(homeName, "football")}
+        ${renderTransfersPanel(awayName, "football")}
       `;
 
       openInsightModal(`${homeName} vs ${awayName} • Match Insight`, content);
@@ -2080,6 +2194,8 @@ function setupCricketInsightEvents(formBoard = []) {
         <div class="insight-chart-wrap">
           <canvas id="insightChartCanvas" aria-label="Cricket match insight chart"></canvas>
         </div>
+        ${renderTransfersPanel(homeTeam, "cricket")}
+        ${renderTransfersPanel(awayTeam, "cricket")}
       `;
 
       openInsightModal(`${homeTeam} vs ${awayTeam} • Cricket Insight`, content);
@@ -2168,6 +2284,7 @@ function setupCricketInsightEvents(formBoard = []) {
         <div class="insight-chart-wrap">
           <canvas id="insightChartCanvas" aria-label="Cricket team profile chart"></canvas>
         </div>
+        ${renderTransfersPanel(teamName, "cricket")}
       `;
 
       openInsightModal(`${teamName} • Team Form`, content);
@@ -2224,6 +2341,8 @@ function setupNbaInsightEvents() {
         <div class="insight-lineup-wrap">
           <p class="inline-meta">Lineups may be unavailable for basketball feeds. Showing roster when present.</p>
         </div>
+        ${renderTransfersPanel(home, "nba")}
+        ${renderTransfersPanel(away, "nba")}
       `;
 
       openInsightModal(`${home} vs ${away} • Match Insight`, content);
@@ -4402,6 +4521,7 @@ function setupDriverListEvents() {
           <canvas id="insightChartCanvas" aria-label="Constructor standings chart"></canvas>
         </div>
         <p class="insight-note">Top drivers: ${escapeHtml(roster)}</p>
+        ${renderTransfersPanel(teamName, "f1")}
       `;
 
       openInsightModal(`${teamName} • Team Insight`, content);
@@ -4944,7 +5064,12 @@ async function renderF1() {
     } = await fetchF1CoreData();
     state.f1.drivers = drivers;
     state.f1.constructors = constructors;
-    state.f1.nextRace = nextRace;
+    const resolvedNextRace = nextRace
+      || seasonCalendar.find((race) => toNum(race.round) > toNum(completedRound))
+      || seasonCalendar[0]
+      || null;
+
+    state.f1.nextRace = resolvedNextRace;
     state.f1.seasonCalendar = seasonCalendar;
     state.f1.seasonCompletedRound = completedRound;
     state.f1.lastRaceResults = lastRaceResults;
@@ -4967,30 +5092,30 @@ async function renderF1() {
       state.f1.selectedDriverId = state.favoriteDriver || drivers[0]?.Driver?.driverId || "";
     }
 
-    const raceDateIso = nextRace ? `${nextRace.date}T${nextRace.time || "00:00:00Z"}` : null;
-    const trackTimeZone = getTrackTimeZone(nextRace);
-    const raceTimeMode = formatEventTimeByMode(nextRace?.date, nextRace?.time, state.timezone, trackTimeZone);
+    const raceDateIso = resolvedNextRace ? `${resolvedNextRace.date}T${resolvedNextRace.time || "00:00:00Z"}` : null;
+    const trackTimeZone = getTrackTimeZone(resolvedNextRace);
+    const raceTimeMode = formatEventTimeByMode(resolvedNextRace?.date, resolvedNextRace?.time, state.timezone, trackTimeZone);
     setupTimezoneAndFxControls();
     const raceMetaEl = qs("#raceMeta");
     if (raceMetaEl) {
       raceMetaEl.textContent = nextRace
-        ? `${nextRace.raceName} | ${nextRace.Circuit.Location.locality}`
+        ? `${resolvedNextRace.raceName} | ${resolvedNextRace.Circuit.Location.locality}`
         : "No race scheduled";
     }
     const nextRaceNameEl = qs("#nextRaceName");
     if (nextRaceNameEl) {
-      nextRaceNameEl.textContent = nextRace?.raceName || "No race scheduled";
+      nextRaceNameEl.textContent = resolvedNextRace?.raceName || "No race scheduled";
     }
     const nextRaceCircuitEl = qs("#nextRaceCircuit");
     if (nextRaceCircuitEl) {
-      nextRaceCircuitEl.textContent = nextRace?.Circuit?.circuitName || "Circuit TBD";
+      nextRaceCircuitEl.textContent = resolvedNextRace?.Circuit?.circuitName || "Circuit TBD";
     }
     const nextRaceStartEl = qs("#nextRaceStart");
     if (nextRaceStartEl) {
       nextRaceStartEl.textContent = `${raceTimeMode.dateLabel} ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`;
     }
 
-    const racePhase = getRacePhase(nextRace);
+    const racePhase = getRacePhase(resolvedNextRace);
     const raceStateBadge = qs("#raceStateBadge");
     const raceStateDetail = qs("#raceStateDetail");
     if (raceStateBadge) {
@@ -5011,49 +5136,43 @@ async function renderF1() {
 
     setupCountdown(raceDateIso);
 
-    const lat = nextRace?.Circuit?.Location?.lat;
-    const lon = nextRace?.Circuit?.Location?.long;
+    const lat = resolvedNextRace?.Circuit?.Location?.lat;
+    const lon = resolvedNextRace?.Circuit?.Location?.long;
     const weatherSummary = await fetchTrackWeather(lat, lon);
-    renderWeekendEventBoard(nextRace, trackTimeZone, weatherSummary);
+    renderWeekendEventBoard(resolvedNextRace, trackTimeZone, weatherSummary);
     updateLiveHUD({
-      raceName: nextRace?.raceName || "No upcoming race",
-      country: nextRace?.Circuit?.Location?.country || "",
+      raceName: resolvedNextRace?.raceName || "No upcoming race",
+      country: resolvedNextRace?.Circuit?.Location?.country || "",
       localTime: `${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`,
       countdown: raceDateIso ? formatCountdown(raceDateIso) : "TBD",
       weather: weatherSummary,
       seasonCompleted: seasonSummary.completed,
       seasonTotal: seasonSummary.totalRounds,
       tickerItems: [
-        `${nextRace?.raceName || "Next race TBD"} • ${nextRace?.Circuit?.circuitName || "Circuit pending"}`,
+        `${resolvedNextRace?.raceName || "Next race TBD"} • ${resolvedNextRace?.Circuit?.circuitName || "Circuit pending"}`,
         `Leader ${leaderName}`,
         `Championship gap ${pointsGap}`,
         `${racePhase.label} • ${racePhase.detail}`,
         `Local start ${raceTimeMode.timeLabel} ${raceTimeMode.zoneLabel}`
       ]
     });
-    try {
-      setupNbaInsightEvents();
-    } catch (e) {
-      // ignore
-    }
-
-    const circuitName = nextRace?.Circuit?.circuitName || "Grand Prix Circuit";
-    const circuitId = nextRace?.Circuit?.circuitId || "silverstone";
+    const circuitName = resolvedNextRace?.Circuit?.circuitName || "Grand Prix Circuit";
+    const circuitId = resolvedNextRace?.Circuit?.circuitId || "silverstone";
 
     const raceTrackLayout = qs("#raceTrackLayout");
     if (raceTrackLayout) {
       raceTrackLayout.innerHTML = renderTrackMap(circuitId);
     }
-    setupUpcomingRaceActions(nextRace);
+    setupUpcomingRaceActions(resolvedNextRace);
     renderPracticeStandouts(drivers);
-    renderSprintInsight(nextRace, trackTimeZone);
+    renderSprintInsight(resolvedNextRace, trackTimeZone);
     setupTrackViewOptions();
 
     renderSeasonCalendar(seasonCalendar);
     setupSeasonCalendarEvents(seasonCalendar);
     setupEventListToggle();
 
-    renderGridAfterQualifying(nextRace, lastQualifying, lastRaceResults);
+    renderGridAfterQualifying(resolvedNextRace, lastQualifying, lastRaceResults);
     setupGridMapLauncher(lat, lon, circuitName);
 
     const driverStandings = qs("#driverStandings");
@@ -5065,8 +5184,8 @@ async function renderF1() {
     setupCurrentStandingToggle();
     renderCurrentStandingView();
 
-    const seasonYear = nextRace?.season ? Number(nextRace.season) : new Date().getUTCFullYear();
-    const prediction = await buildRacePrediction(drivers, nextRace, seasonYear);
+    const seasonYear = resolvedNextRace?.season ? Number(resolvedNextRace.season) : new Date().getUTCFullYear();
+    const prediction = await buildRacePrediction(drivers, resolvedNextRace, seasonYear);
     renderRacePrediction(prediction);
     setupPredictionInsightEvents(prediction, drivers);
 
@@ -6185,6 +6304,7 @@ async function renderNBA() {
         `Live basketball board synced`
       ]
     });
+    setupNbaInsightEvents();
     if (!qs("#liveMatchCenterModal")?.classList.contains("hidden") && state.activeModule === "nba") {
       renderLiveMatchCenter();
     }
