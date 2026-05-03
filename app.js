@@ -26,10 +26,11 @@ const TEAM_LOGO_ASSETS = {
 
 const state = {
   activeModule: localStorage.getItem(STORAGE_KEYS.module) || "f1",
+  switchingModule: false,
   favoriteDriver: localStorage.getItem(STORAGE_KEYS.favoriteDriver) || "",
   favoriteTeam: localStorage.getItem(STORAGE_KEYS.favoriteTeam) || "",
   timezone: localStorage.getItem(STORAGE_KEYS.timezone) || "Asia/Kolkata",
-  fxEnabled: localStorage.getItem(STORAGE_KEYS.fxEnabled) !== "off",
+  fxEnabled: localStorage.getItem(STORAGE_KEYS.fxEnabled) === "on",
   f1: {
     drivers: [],
     constructors: [],
@@ -1720,9 +1721,11 @@ function setupLiveMatchCenter() {
 }
 
 function switchModule(nextModule) {
-  if (!nextModule || nextModule === state.activeModule) {
+  if (!nextModule || nextModule === state.activeModule || state.switchingModule) {
     return;
   }
+
+  state.switchingModule = true;
 
   const applySwitch = () => {
     setSportsLoadingScreen(nextModule);
@@ -1735,6 +1738,7 @@ function switchModule(nextModule) {
       setTimeout(() => {
         setLoadingState(false);
         hideSportsLoadingScreen();
+        state.switchingModule = false;
       }, 500);
     }, 1100);
   };
@@ -4395,6 +4399,11 @@ function renderPaddockQuiz(phaseLabel) {
 function setupCountdown(raceDateIso) {
   if (!raceDateIso) {
     return;
+  }
+
+  if (state.f1.countdownTicker) {
+    clearInterval(state.f1.countdownTicker);
+    state.f1.countdownTicker = null;
   }
 
   const raceStart = new Date(raceDateIso).getTime();
